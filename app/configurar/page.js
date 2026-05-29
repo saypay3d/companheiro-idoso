@@ -183,6 +183,12 @@ export default function Configurar() {
           >
             Contatos
           </button>
+          <button
+            onClick={() => router.push('/perfil')}
+            style={{ background: 'transparent', border: 'none', color: '#444', fontSize: '15px', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
+          >
+            Perfil do Idoso
+          </button>
         </div>
 
       </div>
