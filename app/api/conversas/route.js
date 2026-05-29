@@ -13,7 +13,21 @@ export async function POST(req) {
   console.log('[conversas] usuario_id:', usuario_id, '| puxar:', puxar, '| mensagem:', mensagem_usuario);
   console.log('[conversas] OPENROUTER_API_KEY presente:', !!process.env.OPENROUTER_API_KEY);
 
-  const [usuarioRows, historico, perfil] = await Promise.all([
+  const LABELS_CAMPO = {
+    filhos:            'filhos',
+    netos:             'netos',
+    outros_familiares: 'outros familiares importantes',
+    nome_cuidador:     'cuidador',
+    assuntos_gosta:    'assuntos que gosta de conversar',
+    assuntos_evitar:   'assuntos que deve evitar na conversa',
+    comidas_favoritas: 'comidas favoritas',
+    programas_tv:      'programas de TV favoritos',
+    musicas:           'músicas que gosta',
+    religiao:          'religião',
+    observacoes:       'observações extras',
+  };
+
+  const [usuarioRows, historico, perfil, perfilCompleto] = await Promise.all([
     sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
     sql`SELECT mensagem_usuario, mensagem_ia FROM conversas
         WHERE usuario_id = ${usuario_id} AND mensagem_usuario != '[puxar]'
@@ -21,23 +35,33 @@ export async function POST(req) {
     sql`SELECT tipo, valor FROM perfil_usuario
         WHERE usuario_id = ${usuario_id}
         ORDER BY data_criacao ASC`,
+    sql`SELECT campo, valor FROM perfil_completo
+        WHERE usuario_id = ${usuario_id} AND valor != ''
+        ORDER BY campo ASC`,
   ]);
 
   const nome = usuarioRows[0]?.nome || 'amiga';
 
+  const perfilTexto = perfilCompleto.length > 0
+    ? '\n\nInformações sobre essa pessoa (use naturalmente na conversa quando for relevante — pergunte sobre a novela favorita, sobre o neto pelo nome, etc., sem parecer que está lendo uma ficha): ' +
+      perfilCompleto.map(p => `${LABELS_CAMPO[p.campo] || p.campo}: ${p.valor}`).join('; ')
+    : '';
+
   const memoriaTexto = perfil.length > 0
-    ? '\n\nCoisas que você sabe sobre essa pessoa: ' +
+    ? '\n\nCoisas que você aprendeu nas conversas anteriores: ' +
       perfil.map(p => `${p.tipo}: ${p.valor}`).join('; ')
     : '';
-  console.log('[memoria] perfil carregado:', perfil.length, 'itens', memoriaTexto || '(vazio)');
+
+  console.log('[perfil-completo] campos carregados:', perfilCompleto.length);
+  console.log('[memoria] perfil_usuario carregado:', perfil.length, 'itens');
 
   const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem. Responda em no máximo 15 palavras de forma direta e natural.';
 
   const systemPrompt = puxar
-    ? `Você é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Você é um cuidador sempre presente e carinhoso. Faça uma fala espontânea e natural para iniciar conversa — pode perguntar como ela está se sentindo, contar uma curiosidade interessante, falar sobre algo do cotidiano, ou dizer algo acolhedor. Responda em no máximo 15 palavras de forma direta e natural. Português brasileiro informal. Varie sempre — não repita as mesmas formas de iniciar.${memoriaTexto}`
+    ? `Você é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Você é um cuidador sempre presente e carinhoso. Faça uma fala espontânea e natural para iniciar conversa — pode perguntar como ela está se sentindo, contar uma curiosidade interessante, falar sobre algo do cotidiano, ou dizer algo acolhedor. Responda em no máximo 15 palavras de forma direta e natural. Português brasileiro informal. Varie sempre — não repita as mesmas formas de iniciar.${perfilTexto}${memoriaTexto}`
     : modo_noite
-    ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite agora e ela acabou de dizer algo. Responda com muito carinho e calma, perguntando suavemente se ela está bem ou se precisa de algo. Seja muito breve (1 frase curta). Português brasileiro informal.${memoriaTexto}${instrucaoEnvio}`
-    : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa como um amigo próximo faria. NÃO use expressões repetitivas como "minha querida" ou "querida" a todo momento. Varie o tom: às vezes pergunte como ela está, às vezes conte uma curiosidade interessante, às vezes puxe assunto sobre o dia. Respostas curtas de 1 a 2 frases no máximo. Fale em português brasileiro informal.${memoriaTexto}${instrucaoEnvio}`;
+    ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite agora e ela acabou de dizer algo. Responda com muito carinho e calma, perguntando suavemente se ela está bem ou se precisa de algo. Seja muito breve (1 frase curta). Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
+    : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa como um amigo próximo faria. NÃO use expressões repetitivas como "minha querida" ou "querida" a todo momento. Varie o tom: às vezes pergunte como ela está, às vezes conte uma curiosidade interessante, às vezes puxe assunto sobre o dia. Respostas curtas de 1 a 2 frases no máximo. Fale em português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
 
   const mensagensHistorico = historico.reverse().flatMap(c => [
     { role: 'user',      content: c.mensagem_usuario },
