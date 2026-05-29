@@ -29,6 +29,7 @@ export async function POST(req) {
     ? '\n\nCoisas que você sabe sobre essa pessoa: ' +
       perfil.map(p => `${p.tipo}: ${p.valor}`).join('; ')
     : '';
+  console.log('[memoria] perfil carregado:', perfil.length, 'itens', memoriaTexto || '(vazio)');
 
   const systemPrompt = puxar
     ? `Você é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Você é um cuidador sempre presente e carinhoso. Faça uma fala espontânea e natural para iniciar conversa — pode perguntar como ela está se sentindo, contar uma curiosidade interessante, falar sobre algo do cotidiano, ou dizer algo acolhedor. Seja breve (1 a 2 frases), natural e sem formalidades. Português brasileiro informal. Varie sempre — não repita as mesmas formas de iniciar.${memoriaTexto}`
@@ -97,6 +98,20 @@ export async function POST(req) {
   // Extração de memória de longo prazo — apenas para mensagens reais do usuário
   if (!puxar && mensagem_usuario) {
     try {
+      const promptExtracao = `Você é um extrator de informações pessoais. Analise a mensagem abaixo e extraia dados relevantes sobre a pessoa que falou.
+
+Categorias possíveis: familiar, gosto, saúde, hábito, emoção, preferência, evento.
+
+Exemplos:
+- "meu neto Pedro veio me visitar" → {"dados": [{"tipo": "familiar", "valor": "neto chamado Pedro"}]}
+- "adoro tomar café de manhã" → {"dados": [{"tipo": "gosto", "valor": "gosta de café de manhã"}]}
+- "estou com dor no joelho" → {"dados": [{"tipo": "saúde", "valor": "dor no joelho"}]}
+- "como vai você?" → {"dados": []}
+
+Responda APENAS com o JSON válido, sem texto adicional, sem markdown.
+
+Mensagem: "${mensagem_usuario}"`;
+
       const extractRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -105,27 +120,36 @@ export async function POST(req) {
         },
         body: JSON.stringify({
           model: 'openrouter/auto',
-          messages: [{
-            role: 'user',
-            content: `Analise esta mensagem e extraia dados pessoais relevantes como nomes de familiares, gostos, reclamações de saúde, hábitos, emoções. Responda APENAS em JSON assim: {"dados": [{"tipo": string, "valor": string}]} Se não houver nada relevante responda {"dados": []}\n\nMensagem: "${mensagem_usuario}"`,
-          }],
+          messages: [{ role: 'user', content: promptExtracao }],
         }),
       });
       const extractData = await extractRes.json();
       const raw = extractData.choices?.[0]?.message?.content ?? '';
       console.log('[memoria] resposta bruta:', raw);
 
-      const json = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(json);
+      // Remove markdown code blocks se o modelo os incluir
+      const jsonStr = raw.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(jsonStr);
 
       if (Array.isArray(parsed.dados) && parsed.dados.length > 0) {
         for (const item of parsed.dados) {
-          if (item.tipo && item.valor) {
+          if (!item.tipo || !item.valor) continue;
+          const tipo  = String(item.tipo).slice(0, 100);
+          const valor = String(item.valor).slice(0, 500);
+
+          // Deduplicação: não salva se já existe o mesmo tipo+valor para este usuário
+          const existe = await sql`
+            SELECT 1 FROM perfil_usuario
+            WHERE usuario_id = ${usuario_id} AND tipo = ${tipo} AND valor = ${valor}
+            LIMIT 1`;
+          if (existe.length === 0) {
             await sql`INSERT INTO perfil_usuario (usuario_id, tipo, valor)
-                      VALUES (${usuario_id}, ${String(item.tipo)}, ${String(item.valor)})`;
+                      VALUES (${usuario_id}, ${tipo}, ${valor})`;
+            console.log('[memoria] novo dado salvo:', tipo, '->', valor);
+          } else {
+            console.log('[memoria] já existe, ignorando:', tipo, '->', valor);
           }
         }
-        console.log('[memoria] salvo:', parsed.dados.length, 'itens para usuario', usuario_id);
       } else {
         console.log('[memoria] nada relevante extraído');
       }
