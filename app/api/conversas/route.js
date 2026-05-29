@@ -27,28 +27,41 @@ export async function POST(req) {
         ORDER BY data_criacao ASC`,
   ]);
 
-  // perfil_completo isolado para não derrubar a rota se a tabela não existir
-  let perfilCompleto = [];
+  let perfilCuidador = null;
   try {
-    perfilCompleto = await sql`
-      SELECT campo, valor FROM perfil_completo
-      WHERE usuario_id = ${usuario_id}
-      ORDER BY campo ASC`;
+    const rows = await sql`
+      SELECT nome_completo, idade, apelido, condicao_fisica, doencas,
+             medicamentos, limitacoes_fisicas, limitacoes_cognitivas, rotina_diaria
+      FROM perfil_cuidador
+      WHERE usuario_id = ${usuario_id}`;
+    perfilCuidador = rows[0] ?? null;
   } catch (e) {
-    console.warn('[perfil_completo] tabela indisponível ou erro:', e.message);
+    console.warn('[perfil_cuidador] erro ao buscar:', e.message);
   }
 
   const nome = usuarioRows[0]?.nome || 'amiga';
 
-  const perfilLinhas = perfilCompleto
-    .filter(p => p.valor && p.valor.trim() !== '')
-    .map(p => `${p.campo}: ${p.valor}`)
-    .join('; ');
-  const perfilTexto = perfilLinhas
-    ? '\n\nInformações importantes sobre essa pessoa: ' + perfilLinhas
-    : '';
+  let perfilTexto = '';
+  if (perfilCuidador) {
+    const campos = {
+      'nome': perfilCuidador.nome_completo,
+      'idade': perfilCuidador.idade,
+      'apelido': perfilCuidador.apelido,
+      'condição física': perfilCuidador.condicao_fisica,
+      'doenças': perfilCuidador.doencas,
+      'medicamentos': perfilCuidador.medicamentos,
+      'limitações físicas': perfilCuidador.limitacoes_fisicas,
+      'limitações cognitivas': perfilCuidador.limitacoes_cognitivas,
+      'rotina diária': perfilCuidador.rotina_diaria,
+    };
+    const linhas = Object.entries(campos)
+      .filter(([, v]) => v && String(v).trim() !== '')
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('; ');
+    if (linhas) perfilTexto = '\n\nInformações importantes sobre essa pessoa: ' + linhas;
+  }
 
-  console.log('[perfil_completo] linhas encontradas:', perfilCompleto.length, '| com valor:', perfilLinhas ? 'sim' : 'não');
+  console.log('[perfil_cuidador] carregado:', !!perfilCuidador, '| com dados:', !!perfilTexto);
 
   const memoriaBruta = perfil.length > 0
     ? perfil.map(p => `${p.tipo}: ${p.valor}`).join('; ')
