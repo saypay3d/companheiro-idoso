@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Avatar from '../components/Avatar';
 
-const DORMIR_APOS_MS = 45000;
+const PUXAR_APOS_MS = 5 * 60 * 1000; // 5 minutos sem interação
 
 export default function Conversa() {
   const [estado,      setEstado]      = useState('iniciando');
@@ -18,20 +18,13 @@ export default function Conversa() {
   const usuarioIdRef   = useRef(null);
   const recRef         = useRef(null);
   const enviarRef      = useRef(null);
-  const timerDormirRef = useRef(null);
-
-  function agendarSono() {
-    clearTimeout(timerDormirRef.current);
-    timerDormirRef.current = setTimeout(() => setEstado('dormindo'), DORMIR_APOS_MS);
-  }
+  const timerPuxarRef  = useRef(null);
 
   useEffect(() => {
     const id = localStorage.getItem('usuario_id');
     if (!id) { router.push('/'); return; }
     usuarioIdRef.current = id;
-
-    const tipo = localStorage.getItem('avatar_tipo') || 'vovo';
-    setAvatarTipo(tipo);
+    setAvatarTipo(localStorage.getItem('avatar_tipo') || 'vovo');
 
     fetch('/api/usuarios')
       .then(r => r.json())
@@ -56,16 +49,50 @@ export default function Conversa() {
       const synth = window.speechSynthesis;
       synth.cancel();
       const u = new SpeechSynthesisUtterance(texto);
-      u.lang = 'pt-BR';
-      u.rate = 0.8;
+      u.lang   = 'pt-BR';
+      u.rate   = 0.8;
       selecionarVoz(u);
       u.onend  = resolve;
       u.onerror = resolve;
       synth.speak(u);
     });
 
+    function agendarPuxar() {
+      clearTimeout(timerPuxarRef.current);
+      timerPuxarRef.current = setTimeout(puxarConversa, PUXAR_APOS_MS);
+    }
+
+    async function puxarConversa() {
+      if (pausarRef.current) {
+        timerPuxarRef.current = setTimeout(puxarConversa, 60000);
+        return;
+      }
+      pausarRef.current = true;
+      try { recRef.current?.stop(); } catch (e) {}
+      setEstado('pensando');
+      try {
+        const res  = await fetch('/api/puxar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario_id: usuarioIdRef.current }),
+        });
+        const data = await res.json();
+        if (data.resposta) {
+          setEstado('falando');
+          await falar(data.resposta);
+        }
+      } catch (e) {
+        console.error('[puxar] erro no cliente:', e);
+      } finally {
+        pausarRef.current = false;
+        setEstado('ouvindo');
+        iniciarEscuta();
+        agendarPuxar();
+      }
+    }
+
     async function enviarParaIA(texto) {
-      clearTimeout(timerDormirRef.current);
+      clearTimeout(timerPuxarRef.current);
       setEstado('pensando');
       try {
         const res  = await fetch('/api/conversas', {
@@ -82,7 +109,7 @@ export default function Conversa() {
         pausarRef.current = false;
         setEstado('ouvindo');
         iniciarEscuta();
-        agendarSono();
+        agendarPuxar();
       }
     }
 
@@ -125,11 +152,11 @@ export default function Conversa() {
     enviarRef.current = enviarParaIA;
 
     const timerInicio = setTimeout(iniciarEscuta, 800);
-    agendarSono();
+    agendarPuxar();
 
     return () => {
       clearTimeout(timerInicio);
-      clearTimeout(timerDormirRef.current);
+      clearTimeout(timerPuxarRef.current);
       pausarRef.current = true;
       try { recRef.current?.stop(); } catch (e) {}
       window.speechSynthesis?.cancel();
@@ -150,14 +177,12 @@ export default function Conversa() {
     ouvindo:   'Estou te ouvindo...',
     pensando:  'Pensando...',
     falando:   'Falando...',
-    dormindo:  'Dormindo... fale para acordar 😴',
-  }[estado] ?? '';
+  }[estado] ?? 'Estou aqui...';
 
   const statusCor = {
     ouvindo:   '#2ecc71',
     pensando:  '#9b59b6',
     falando:   '#3498db',
-    dormindo:  '#7f8c8d',
     iniciando: '#555',
   }[estado] ?? '#555';
 
