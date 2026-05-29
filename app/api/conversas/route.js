@@ -15,43 +15,52 @@ export async function POST(req) {
   const systemPrompt = `Você é um companheiro amigável de uma senhora idosa de 91 anos chamada ${nome}. Responda de forma curta, carinhosa e em português.`;
   const mensagem = mensagem_usuario;
 
-  const body = {
-    model: 'google/gemma-3-4b-it:free',
-    messages: [
-      { role: 'user', content: `${systemPrompt}\n\n${mensagem}` },
-    ],
-  };
+  const MODELOS = ['google/gemma-2-9b-it:free', 'meta-llama/llama-3.1-8b-instruct:free'];
+  const mensagens = [{ role: 'user', content: `${systemPrompt}\n\n${mensagem}` }];
 
-  console.log('[conversas] Enviando para OpenRouter:', JSON.stringify(body));
+  let orData = null;
+  let modeloUsado = null;
 
-  const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  for (const modelo of MODELOS) {
+    const body = { model: modelo, messages: mensagens };
+    console.log('[conversas] Tentando modelo:', modelo);
 
-  console.log('[conversas] Status OpenRouter:', orRes.status, orRes.statusText);
+    const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
 
-  const orData = await orRes.json();
+    console.log('[conversas] Status:', orRes.status, 'modelo:', modelo);
+    const data = await orRes.json();
+    console.log('[conversas] Resposta:', JSON.stringify(data));
 
-  console.log('[conversas] Resposta OpenRouter:', JSON.stringify(orData));
+    if (orRes.ok && data.choices?.[0]?.message?.content) {
+      orData = data;
+      modeloUsado = modelo;
+      break;
+    }
 
-  if (!orRes.ok || !orData.choices?.[0]?.message?.content) {
-    console.error('[conversas] ERRO: resposta inválida do OpenRouter');
+    console.error('[conversas] Falhou com', modelo, '— tentando próximo');
+  }
+
+  if (!orData) {
+    console.error('[conversas] Todos os modelos falharam');
     return Response.json(
       { resposta: 'Tive um probleminha para responder. Tente de novo!' },
       { status: 200 }
     );
   }
 
+  console.log('[conversas] Sucesso com modelo:', modeloUsado);
+
   const mensagem_ia = orData.choices[0].message.content.trim();
+  console.log('[conversas] Resposta IA:', mensagem_ia);
 
   await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia) VALUES (${usuario_id}, ${mensagem_usuario}, ${mensagem_ia})`;
-
-  console.log('[conversas] Sucesso! Resposta IA:', mensagem_ia);
 
   return Response.json({ resposta: mensagem_ia });
 }
