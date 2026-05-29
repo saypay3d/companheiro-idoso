@@ -14,6 +14,7 @@ export default function Conversa() {
   const [semSupporte, setSemSupporte] = useState(false);
   const [modoCalib,   setModoCalib]   = useState(false);
   const [inputCalib,  setInputCalib]  = useState('');
+  const [erroDebug,   setErroDebug]   = useState(null);
   const [noturno,     setNoturno]     = useState(() => {
     const h = new Date().getHours();
     return h >= 21 || h < 7;
@@ -189,11 +190,19 @@ export default function Conversa() {
           body: JSON.stringify({ usuario_id: usuarioIdRef.current, puxar: true }),
         });
         const data = await res.json();
+        if (data.debug) {
+          const resumo = data.debug.erros?.map(e => `[${e.modelo}] HTTP ${e.status} — ${e.erro}`).join(' | ');
+          console.error('[puxar] debug:', resumo);
+          setErroDebug(resumo);
+        } else {
+          setErroDebug(null);
+        }
         if (data.resposta) {
           setEstado('falando');
           await falar(data.resposta);
         }
       } catch (e) {
+        setErroDebug('Erro de rede: ' + e.message);
         console.error('[puxar] erro no cliente:', e);
       } finally {
         pausarRef.current = false;
@@ -231,6 +240,7 @@ export default function Conversa() {
     async function enviarParaIA(texto, modoNoite = false) {
       clearTimeout(timerPuxarRef.current);
       puxarSemRespostaRef.current = 0;
+      setErroDebug(null);
       setEstado('pensando');
       try {
         const res  = await fetch('/api/conversas', {
@@ -243,16 +253,25 @@ export default function Conversa() {
           }),
         });
         const data = await res.json();
-        setEstado('falando');
 
-        // Detecta comando de envio de mensagem WhatsApp
-        const matchEnviar = data.resposta?.match(/ENVIAR_MSG:([^:\n]+):([\s\S]+)/);
-        if (matchEnviar) {
-          await processarEnvioMensagem(matchEnviar[1].trim(), matchEnviar[2].trim());
-        } else {
-          await falar(data.resposta);
+        if (data.debug) {
+          const resumo = data.debug.erros?.map(e => `[${e.modelo}] HTTP ${e.status} — ${e.erro}`).join(' | ');
+          console.error('[enviar] debug:', resumo);
+          setErroDebug(resumo);
+        }
+
+        if (data.resposta) {
+          setEstado('falando');
+          // Detecta comando de envio de mensagem WhatsApp
+          const matchEnviar = data.resposta.match(/ENVIAR_MSG:([^:\n]+):([\s\S]+)/);
+          if (matchEnviar) {
+            await processarEnvioMensagem(matchEnviar[1].trim(), matchEnviar[2].trim());
+          } else {
+            await falar(data.resposta);
+          }
         }
       } catch (e) {
+        setErroDebug('Erro de rede: ' + e.message);
         console.error(e);
       } finally {
         pausarRef.current = false;
@@ -424,6 +443,15 @@ export default function Conversa() {
       <p style={{ fontSize:'28px', fontWeight:300, margin:'28px 0 0', color: semSupporte ? '#e74c3c' : statusCor, textAlign:'center', transition:'color .5s ease', letterSpacing:'.04em', padding:'0 24px' }}>
         {semSupporte ? '⚠️ Use o Google Chrome para ativar o microfone' : statusTexto}
       </p>
+
+      {/* Erro debug — visível só quando há falha */}
+      {erroDebug && (
+        <div style={{ margin:'16px 24px 0', padding:'10px 14px', backgroundColor:'#2a0a0a', border:'1px solid #6b1a1a', borderRadius:'10px', maxWidth:'600px', width:'calc(100% - 48px)' }}>
+          <p style={{ margin:0, fontSize:'13px', color:'#e57373', fontFamily:'monospace', wordBreak:'break-all', lineHeight:1.5 }}>
+            ⚠ Erro OpenRouter: {erroDebug}
+          </p>
+        </div>
+      )}
 
       {/* Overlay noturno */}
       {noturno && (

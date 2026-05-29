@@ -47,9 +47,7 @@ export async function POST(req) {
   const perfilBruto = perfilCompleto.length > 0
     ? perfilCompleto.map(p => `${LABELS_CAMPO[p.campo] || p.campo}: ${p.valor}`).join('; ')
     : '';
-  const perfilTruncado = perfilBruto.length > 500
-    ? perfilBruto.slice(0, 500) + '...'
-    : perfilBruto;
+  const perfilTruncado = perfilBruto.length > 500 ? perfilBruto.slice(0, 500) + '...' : perfilBruto;
   const perfilTexto = perfilTruncado
     ? '\n\nInformações sobre essa pessoa (use naturalmente quando relevante, sem parecer que lê uma ficha): ' + perfilTruncado
     : '';
@@ -58,15 +56,13 @@ export async function POST(req) {
   const memoriaBruta = perfil.length > 0
     ? perfil.map(p => `${p.tipo}: ${p.valor}`).join('; ')
     : '';
-  const memoriaTruncada = memoriaBruta.length > 300
-    ? memoriaBruta.slice(0, 300) + '...'
-    : memoriaBruta;
+  const memoriaTruncada = memoriaBruta.length > 300 ? memoriaBruta.slice(0, 300) + '...' : memoriaBruta;
   const memoriaTexto = memoriaTruncada
     ? '\n\nAprendeu nas conversas anteriores: ' + memoriaTruncada
     : '';
 
-  console.log('[perfil-completo] campos:', perfilCompleto.length, '| chars no prompt:', perfilTruncado.length);
-  console.log('[memoria] itens:', perfil.length, '| chars no prompt:', memoriaTruncada.length);
+  console.log('[perfil-completo] campos:', perfilCompleto.length, '| chars:', perfilTruncado.length);
+  console.log('[memoria] itens:', perfil.length, '| chars:', memoriaTruncada.length);
 
   const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem. Responda em no máximo 15 palavras de forma direta e natural.';
 
@@ -89,6 +85,7 @@ export async function POST(req) {
     { role: 'user', content: puxar ? '[inicie a conversa agora espontaneamente]' : mensagem_usuario },
   ];
 
+  const erros = [];
   let orData = null;
   let modeloUsado = null;
 
@@ -107,14 +104,19 @@ export async function POST(req) {
       rawText = await orRes.text();
       data = JSON.parse(rawText);
     } catch (err) {
-      console.error('[conversas] Erro com', modelo,
-        '| status:', orRes?.status, orRes?.statusText,
-        '| raw:', rawText?.slice(0, 300),
-        '| err:', err.message);
+      const detalhe = {
+        modelo,
+        status: orRes?.status ?? 'network_error',
+        statusText: orRes?.statusText ?? '',
+        erro: err.message,
+        body: rawText?.slice(0, 400) ?? '',
+      };
+      console.error('[conversas] Erro de rede/parse com', modelo, JSON.stringify(detalhe));
+      erros.push(detalhe);
       continue;
     }
 
-    console.log('[conversas] Status:', orRes.status, '| modelo:', modelo);
+    console.log('[conversas] HTTP', orRes.status, '| modelo:', modelo);
 
     const conteudo = data.choices?.[0]?.message?.content;
     if (orRes.ok && conteudo && conteudo.trim().length > 0) {
@@ -124,20 +126,28 @@ export async function POST(req) {
       break;
     }
 
-    // Log detalhado da falha
-    console.error('[conversas] Falhou com', modelo,
-      '| status:', orRes.status,
-      '| error:', data.error?.message ?? '(sem error field)',
-      '| choices[0]:', JSON.stringify(data.choices?.[0] ?? null),
-      '| body resumido:', rawText?.slice(0, 500));
+    const detalhe = {
+      modelo,
+      status: orRes.status,
+      statusText: orRes.statusText,
+      erro: data.error?.message ?? data.error?.code ?? '(sem campo error)',
+      choices0: JSON.stringify(data.choices?.[0] ?? null),
+      body: rawText?.slice(0, 400),
+    };
+    console.error('[conversas] Falhou com', modelo, JSON.stringify(detalhe));
+    erros.push(detalhe);
   }
 
   if (!orData) {
-    console.error('[conversas] Todos os modelos falharam');
-    return Response.json({ resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!' });
+    console.error('[conversas] Todos os modelos falharam:', JSON.stringify(erros));
+    return Response.json({
+      resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!',
+      debug: { erros },
+    });
   }
 
   const mensagem_ia = orData.choices[0].message.content.trim();
+  console.log('[conversas] Resposta IA:', mensagem_ia);
 
   const mensagemSalva = puxar ? '[puxar]' : mensagem_usuario;
   await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia)
