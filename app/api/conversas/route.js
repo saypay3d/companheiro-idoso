@@ -2,30 +2,31 @@ import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL);
 
+// openrouter/auto primeiro — roteamento automático é mais robusto
 const MODELOS = [
-  'deepseek/deepseek-v4-flash:free',
   'openrouter/auto',
+  'deepseek/deepseek-v4-flash:free',
 ];
+
+const LABELS_CAMPO = {
+  filhos:            'filhos',
+  netos:             'netos',
+  outros_familiares: 'outros familiares importantes',
+  nome_cuidador:     'cuidador',
+  assuntos_gosta:    'assuntos que gosta de conversar',
+  assuntos_evitar:   'assuntos que deve evitar na conversa',
+  comidas_favoritas: 'comidas favoritas',
+  programas_tv:      'programas de TV favoritos',
+  musicas:           'músicas que gosta',
+  religiao:          'religião',
+  observacoes:       'observações extras',
+};
 
 export async function POST(req) {
   const { usuario_id, mensagem_usuario, modo_noite, puxar } = await req.json();
 
   console.log('[conversas] usuario_id:', usuario_id, '| puxar:', puxar, '| mensagem:', mensagem_usuario);
   console.log('[conversas] OPENROUTER_API_KEY presente:', !!process.env.OPENROUTER_API_KEY);
-
-  const LABELS_CAMPO = {
-    filhos:            'filhos',
-    netos:             'netos',
-    outros_familiares: 'outros familiares importantes',
-    nome_cuidador:     'cuidador',
-    assuntos_gosta:    'assuntos que gosta de conversar',
-    assuntos_evitar:   'assuntos que deve evitar na conversa',
-    comidas_favoritas: 'comidas favoritas',
-    programas_tv:      'programas de TV favoritos',
-    musicas:           'músicas que gosta',
-    religiao:          'religião',
-    observacoes:       'observações extras',
-  };
 
   const [usuarioRows, historico, perfil, perfilCompleto] = await Promise.all([
     sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
@@ -42,26 +43,40 @@ export async function POST(req) {
 
   const nome = usuarioRows[0]?.nome || 'amiga';
 
-  const perfilTexto = perfilCompleto.length > 0
-    ? '\n\nInformações sobre essa pessoa (use naturalmente na conversa quando for relevante — pergunte sobre a novela favorita, sobre o neto pelo nome, etc., sem parecer que está lendo uma ficha): ' +
-      perfilCompleto.map(p => `${LABELS_CAMPO[p.campo] || p.campo}: ${p.valor}`).join('; ')
+  // Limita a 500 chars para não inflar o prompt
+  const perfilBruto = perfilCompleto.length > 0
+    ? perfilCompleto.map(p => `${LABELS_CAMPO[p.campo] || p.campo}: ${p.valor}`).join('; ')
+    : '';
+  const perfilTruncado = perfilBruto.length > 500
+    ? perfilBruto.slice(0, 500) + '...'
+    : perfilBruto;
+  const perfilTexto = perfilTruncado
+    ? '\n\nInformações sobre essa pessoa (use naturalmente quando relevante, sem parecer que lê uma ficha): ' + perfilTruncado
     : '';
 
-  const memoriaTexto = perfil.length > 0
-    ? '\n\nCoisas que você aprendeu nas conversas anteriores: ' +
-      perfil.map(p => `${p.tipo}: ${p.valor}`).join('; ')
+  // Limita memória dinâmica a 300 chars
+  const memoriaBruta = perfil.length > 0
+    ? perfil.map(p => `${p.tipo}: ${p.valor}`).join('; ')
+    : '';
+  const memoriaTruncada = memoriaBruta.length > 300
+    ? memoriaBruta.slice(0, 300) + '...'
+    : memoriaBruta;
+  const memoriaTexto = memoriaTruncada
+    ? '\n\nAprendeu nas conversas anteriores: ' + memoriaTruncada
     : '';
 
-  console.log('[perfil-completo] campos carregados:', perfilCompleto.length);
-  console.log('[memoria] perfil_usuario carregado:', perfil.length, 'itens');
+  console.log('[perfil-completo] campos:', perfilCompleto.length, '| chars no prompt:', perfilTruncado.length);
+  console.log('[memoria] itens:', perfil.length, '| chars no prompt:', memoriaTruncada.length);
 
   const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem. Responda em no máximo 15 palavras de forma direta e natural.';
 
   const systemPrompt = puxar
-    ? `Você é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Você é um cuidador sempre presente e carinhoso. Faça uma fala espontânea e natural para iniciar conversa — pode perguntar como ela está se sentindo, contar uma curiosidade interessante, falar sobre algo do cotidiano, ou dizer algo acolhedor. Responda em no máximo 15 palavras de forma direta e natural. Português brasileiro informal. Varie sempre — não repita as mesmas formas de iniciar.${perfilTexto}${memoriaTexto}`
+    ? `Você é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Faça uma fala espontânea e natural para iniciar conversa. Responda em no máximo 15 palavras. Português brasileiro informal. Varie sempre.${perfilTexto}${memoriaTexto}`
     : modo_noite
-    ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite agora e ela acabou de dizer algo. Responda com muito carinho e calma, perguntando suavemente se ela está bem ou se precisa de algo. Seja muito breve (1 frase curta). Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
-    : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa como um amigo próximo faria. NÃO use expressões repetitivas como "minha querida" ou "querida" a todo momento. Varie o tom: às vezes pergunte como ela está, às vezes conte uma curiosidade interessante, às vezes puxe assunto sobre o dia. Respostas curtas de 1 a 2 frases no máximo. Fale em português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
+    ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
+    : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
+
+  console.log('[conversas] system prompt total chars:', systemPrompt.length);
 
   const mensagensHistorico = historico.reverse().flatMap(c => [
     { role: 'user',      content: c.mensagem_usuario },
@@ -79,7 +94,7 @@ export async function POST(req) {
 
   for (const modelo of MODELOS) {
     console.log('[conversas] Tentando modelo:', modelo);
-    let orRes, data;
+    let orRes, rawText, data;
     try {
       orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -87,24 +102,34 @@ export async function POST(req) {
           'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model: modelo, messages: mensagens, max_tokens: 100 }),
+        body: JSON.stringify({ model: modelo, messages: mensagens, max_tokens: 150 }),
       });
-      data = await orRes.json();
-    } catch (fetchErr) {
-      console.error('[conversas] Erro de rede com', modelo, ':', fetchErr.message);
+      rawText = await orRes.text();
+      data = JSON.parse(rawText);
+    } catch (err) {
+      console.error('[conversas] Erro com', modelo,
+        '| status:', orRes?.status, orRes?.statusText,
+        '| raw:', rawText?.slice(0, 300),
+        '| err:', err.message);
       continue;
     }
 
     console.log('[conversas] Status:', orRes.status, '| modelo:', modelo);
-    console.log('[conversas] Body:', JSON.stringify(data));
 
-    if (orRes.ok && data.choices?.[0]?.message?.content) {
+    const conteudo = data.choices?.[0]?.message?.content;
+    if (orRes.ok && conteudo && conteudo.trim().length > 0) {
       orData = data;
       modeloUsado = modelo;
+      console.log('[conversas] Sucesso com modelo:', modeloUsado, '| resposta:', conteudo.trim());
       break;
     }
 
-    console.error('[conversas] Falhou com', modelo, '— tentando próximo');
+    // Log detalhado da falha
+    console.error('[conversas] Falhou com', modelo,
+      '| status:', orRes.status,
+      '| error:', data.error?.message ?? '(sem error field)',
+      '| choices[0]:', JSON.stringify(data.choices?.[0] ?? null),
+      '| body resumido:', rawText?.slice(0, 500));
   }
 
   if (!orData) {
@@ -112,16 +137,13 @@ export async function POST(req) {
     return Response.json({ resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!' });
   }
 
-  console.log('[conversas] Sucesso com modelo:', modeloUsado);
-
   const mensagem_ia = orData.choices[0].message.content.trim();
-  console.log('[conversas] Resposta IA:', mensagem_ia);
 
   const mensagemSalva = puxar ? '[puxar]' : mensagem_usuario;
   await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia)
             VALUES (${usuario_id}, ${mensagemSalva}, ${mensagem_ia})`;
 
-  // Extração de memória — fire-and-forget, não bloqueia a resposta
+  // Extração de memória — fire-and-forget
   if (!puxar && mensagem_usuario) {
     const promptExtracao = `Você é um extrator de informações pessoais. Analise a mensagem abaixo e extraia dados relevantes sobre a pessoa que falou.
 
