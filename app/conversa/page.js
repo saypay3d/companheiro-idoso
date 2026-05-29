@@ -3,7 +3,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Avatar from '../components/Avatar';
 
-const PUXAR_APOS_MS = 5 * 60 * 1000; // 5 minutos sem interação
+const PUXAR_APOS_MS          = 5 * 60 * 1000;  // 5 minutos sem interação
+const VIGIA_APOS_MS          = 30 * 60 * 1000; // 30 minutos sem interação (noite)
+const MAX_PUXAR_SEM_RESPOSTA = 3;
 
 export default function Conversa() {
   const [estado,      setEstado]      = useState('iniciando');
@@ -14,11 +16,13 @@ export default function Conversa() {
   const [inputCalib,  setInputCalib]  = useState('');
   const router = useRouter();
 
-  const pausarRef      = useRef(false);
-  const usuarioIdRef   = useRef(null);
-  const recRef         = useRef(null);
-  const enviarRef      = useRef(null);
-  const timerPuxarRef  = useRef(null);
+  const pausarRef           = useRef(false);
+  const usuarioIdRef        = useRef(null);
+  const recRef              = useRef(null);
+  const enviarRef           = useRef(null);
+  const timerPuxarRef       = useRef(null);
+  const modoVigiaRef        = useRef(false);
+  const puxarSemRespostaRef = useRef(0);
 
   useEffect(() => {
     const id = localStorage.getItem('usuario_id');
@@ -32,6 +36,11 @@ export default function Conversa() {
         const user = data.find(u => String(u.id) === String(id));
         if (user) setNomeUsuario(user.nome);
       });
+
+    function isNoite() {
+      const h = new Date().getHours();
+      return h >= 21 || h < 7;
+    }
 
     function selecionarVoz(u) {
       const vozTipo = localStorage.getItem('voz_tipo') || 'feminina';
@@ -49,20 +58,42 @@ export default function Conversa() {
       const synth = window.speechSynthesis;
       synth.cancel();
       const u = new SpeechSynthesisUtterance(texto);
-      u.lang   = 'pt-BR';
-      u.rate   = 0.8;
+      u.lang    = 'pt-BR';
+      u.rate    = 0.8;
       selecionarVoz(u);
-      u.onend  = resolve;
+      u.onend   = resolve;
       u.onerror = resolve;
       synth.speak(u);
     });
 
-    function agendarPuxar() {
+    function agendarProximaAcao() {
       clearTimeout(timerPuxarRef.current);
-      timerPuxarRef.current = setTimeout(puxarConversa, PUXAR_APOS_MS);
+      if (isNoite()) {
+        timerPuxarRef.current = setTimeout(entrarVigia, VIGIA_APOS_MS);
+      } else {
+        modoVigiaRef.current = false;
+        timerPuxarRef.current = setTimeout(puxarConversa, PUXAR_APOS_MS);
+      }
+    }
+
+    function entrarVigia() {
+      if (pausarRef.current) {
+        timerPuxarRef.current = setTimeout(entrarVigia, 60000);
+        return;
+      }
+      if (!isNoite()) {
+        agendarProximaAcao();
+        return;
+      }
+      modoVigiaRef.current = true;
+      setEstado('vigia');
     }
 
     async function puxarConversa() {
+      if (isNoite()) {
+        agendarProximaAcao();
+        return;
+      }
       if (pausarRef.current) {
         timerPuxarRef.current = setTimeout(puxarConversa, 60000);
         return;
@@ -85,20 +116,27 @@ export default function Conversa() {
         console.error('[puxar] erro no cliente:', e);
       } finally {
         pausarRef.current = false;
-        setEstado('ouvindo');
+        puxarSemRespostaRef.current += 1;
+        const preocupado = puxarSemRespostaRef.current >= MAX_PUXAR_SEM_RESPOSTA;
+        setEstado(preocupado ? 'preocupado' : 'ouvindo');
         iniciarEscuta();
-        agendarPuxar();
+        agendarProximaAcao();
       }
     }
 
-    async function enviarParaIA(texto) {
+    async function enviarParaIA(texto, modoNoite = false) {
       clearTimeout(timerPuxarRef.current);
+      puxarSemRespostaRef.current = 0;
       setEstado('pensando');
       try {
         const res  = await fetch('/api/conversas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usuario_id: usuarioIdRef.current, mensagem_usuario: texto }),
+          body: JSON.stringify({
+            usuario_id: usuarioIdRef.current,
+            mensagem_usuario: texto,
+            modo_noite: modoNoite,
+          }),
         });
         const data = await res.json();
         setEstado('falando');
@@ -109,7 +147,7 @@ export default function Conversa() {
         pausarRef.current = false;
         setEstado('ouvindo');
         iniciarEscuta();
-        agendarPuxar();
+        agendarProximaAcao();
       }
     }
 
@@ -123,7 +161,11 @@ export default function Conversa() {
       rec.continuous     = false;
       rec.interimResults = false;
 
-      rec.onstart = () => setEstado('ouvindo');
+      rec.onstart = () => {
+        if (!modoVigiaRef.current && puxarSemRespostaRef.current < MAX_PUXAR_SEM_RESPOSTA) {
+          setEstado('ouvindo');
+        }
+      };
 
       rec.onresult = (e) => {
         const r = e.results[e.results.length - 1];
@@ -132,7 +174,8 @@ export default function Conversa() {
           if (texto) {
             pausarRef.current = true;
             rec.stop();
-            enviarParaIA(texto);
+            modoVigiaRef.current = false;
+            enviarParaIA(texto, isNoite());
           }
         }
       };
@@ -152,7 +195,7 @@ export default function Conversa() {
     enviarRef.current = enviarParaIA;
 
     const timerInicio = setTimeout(iniciarEscuta, 800);
-    agendarPuxar();
+    agendarProximaAcao();
 
     return () => {
       clearTimeout(timerInicio);
@@ -173,17 +216,21 @@ export default function Conversa() {
   };
 
   const statusTexto = {
-    iniciando: 'Iniciando...',
-    ouvindo:   'Estou te ouvindo...',
-    pensando:  'Pensando...',
-    falando:   'Falando...',
+    iniciando:  'Iniciando...',
+    ouvindo:    'Estou te ouvindo...',
+    pensando:   'Pensando...',
+    falando:    'Falando...',
+    vigia:      'Estou de vigia...',
+    preocupado: 'Estou preocupada com você...',
   }[estado] ?? 'Estou aqui...';
 
   const statusCor = {
-    ouvindo:   '#2ecc71',
-    pensando:  '#9b59b6',
-    falando:   '#3498db',
-    iniciando: '#555',
+    ouvindo:    '#2ecc71',
+    pensando:   '#9b59b6',
+    falando:    '#3498db',
+    iniciando:  '#555',
+    vigia:      '#4a7f9f',
+    preocupado: '#e67e22',
   }[estado] ?? '#555';
 
   return (

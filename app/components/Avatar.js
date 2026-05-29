@@ -1,17 +1,28 @@
 'use client';
 
 const BORDA = {
-  ouvindo:  '#2ecc71',
-  pensando: '#9b59b6',
-  falando:  '#3498db',
-  iniciando:'#444',
+  ouvindo:    '#2ecc71',
+  pensando:   '#9b59b6',
+  falando:    '#3498db',
+  iniciando:  '#444',
+  vigia:      '#4a7f9f',
+  preocupado: '#e67e22',
 };
 
 /* ─── VOVOZINHA ─── */
 function VovoSVG({ estado }) {
-  const pensando = estado === 'pensando';
-  const falando  = estado === 'falando';
-  const pyOff    = pensando ? -6 : 0;
+  const pensando   = estado === 'pensando';
+  const falando    = estado === 'falando';
+  const vigia      = estado === 'vigia';
+  const preocupado = estado === 'preocupado';
+  const pyOff      = pensando ? -6 : 0;
+
+  const browL = preocupado ? 'M58,88 Q74,78 88,84'
+              : pensando   ? 'M58,82 Q76,74 88,80'
+              : 'M60,86 Q76,79 88,84';
+  const browR = preocupado ? 'M112,84 Q126,78 142,88'
+              : pensando   ? 'M112,80 Q124,74 142,82'
+              : 'M112,84 Q124,79 140,86';
 
   return (
     <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"
@@ -33,10 +44,8 @@ function VovoSVG({ estado }) {
       <ellipse cx="154" cy="130" rx="22" ry="13" fill="#F08080" opacity=".32" />
 
       {/* Sobrancelhas */}
-      <path d={pensando ? 'M58,82 Q76,74 88,80' : 'M60,86 Q76,79 88,84'}
-        stroke="#B0A0A0" strokeWidth="2.8" fill="none" strokeLinecap="round" />
-      <path d={pensando ? 'M112,80 Q124,74 142,82' : 'M112,84 Q124,79 140,86'}
-        stroke="#B0A0A0" strokeWidth="2.8" fill="none" strokeLinecap="round" />
+      <path d={browL} stroke="#B0A0A0" strokeWidth="2.8" fill="none" strokeLinecap="round" />
+      <path d={browR} stroke="#B0A0A0" strokeWidth="2.8" fill="none" strokeLinecap="round" />
 
       {/* Óculos */}
       <ellipse cx="76"  cy="104" rx="22" ry="17" fill="rgba(255,240,200,.25)" stroke="#8B7355" strokeWidth="2.5" />
@@ -51,14 +60,16 @@ function VovoSVG({ estado }) {
         <circle cx="76"  cy={104+pyOff} r="7"   fill="#3D2B1F" />
         <circle cx="78"  cy={102+pyOff} r="2.5" fill="white" />
       </g>
-      <ellipse cx="76"  cy="104" rx="12.5" ry="14.5" fill="#FFE4C4" className="av-palpebra" />
+      <ellipse cx="76"  cy="104" rx="12.5" ry="14.5" fill="#FFE4C4"
+        className={vigia ? 'av-vigia-palpebra' : 'av-palpebra'} />
 
       <ellipse cx="124" cy="104" rx="12" ry="14" fill="white" />
       <g className={pensando ? 'av-pupila-cima' : 'av-pupila-mov'} style={{animationDelay:'.1s'}}>
         <circle cx="124" cy={104+pyOff} r="7"   fill="#3D2B1F" />
         <circle cx="126" cy={102+pyOff} r="2.5" fill="white" />
       </g>
-      <ellipse cx="124" cy="104" rx="12.5" ry="14.5" fill="#FFE4C4" className="av-palpebra av-palpebra-r" />
+      <ellipse cx="124" cy="104" rx="12.5" ry="14.5" fill="#FFE4C4"
+        className={vigia ? 'av-vigia-palpebra' : 'av-palpebra av-palpebra-r'} />
 
       {/* Ruguinhas gentis */}
       <path d="M90,93 L94,89"   stroke="#DDA0A0" strokeWidth="1" opacity=".4" strokeLinecap="round" />
@@ -70,6 +81,10 @@ function VovoSVG({ estado }) {
       {/* Boca */}
       {falando
         ? <ellipse cx="100" cy="142" rx="17" ry="9" fill="#C06060" className="av-boca-fala" />
+        : preocupado
+        ? <path d="M80,149 Q100,138 120,149" stroke="#C06060" strokeWidth="3.5" fill="none" strokeLinecap="round" />
+        : vigia
+        ? <path d="M84,142 Q100,148 116,142" stroke="#C06060" strokeWidth="3" fill="none" strokeLinecap="round" />
         : pensando
         ? <path d="M86,142 Q100,145 114,142" stroke="#C06060" strokeWidth="3" fill="none" strokeLinecap="round" />
         : <path d="M80,139 Q100,156 120,139" stroke="#C06060" strokeWidth="3.5" fill="none" strokeLinecap="round" />
@@ -87,9 +102,18 @@ function VovoSVG({ estado }) {
 
 /* ─── GATINHO ─── */
 function GatoSVG({ estado }) {
-  const pensando = estado === 'pensando';
-  const falando  = estado === 'falando';
-  const pyOff    = pensando ? -5 : 0;
+  const pensando   = estado === 'pensando';
+  const falando    = estado === 'falando';
+  const vigia      = estado === 'vigia';
+  const preocupado = estado === 'preocupado';
+  const pyOff      = pensando ? -5 : 0;
+
+  const browL = preocupado ? 'M50,95 Q66,84 84,91'
+              : pensando   ? 'M50,89 Q68,81 84,87'
+              : 'M52,93 Q68,86 84,91';
+  const browR = preocupado ? 'M116,91 Q134,84 150,95'
+              : pensando   ? 'M116,87 Q132,81 150,89'
+              : 'M116,91 Q132,86 148,93';
 
   return (
     <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"
@@ -109,10 +133,8 @@ function GatoSVG({ estado }) {
       <ellipse cx="150" cy="132" rx="24" ry="14" fill="#FFD0C8" opacity=".5" />
 
       {/* Sobrancelhas */}
-      <path d={pensando ? 'M50,89 Q68,81 84,87' : 'M52,93 Q68,86 84,91'}
-        stroke="#C8A080" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-      <path d={pensando ? 'M116,87 Q132,81 150,89' : 'M116,91 Q132,86 148,93'}
-        stroke="#C8A080" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <path d={browL} stroke="#C8A080" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <path d={browR} stroke="#C8A080" strokeWidth="2.5" fill="none" strokeLinecap="round" />
 
       {/* Olhos grandes */}
       <ellipse cx="70"  cy="108" rx="23" ry="25" fill="white" />
@@ -122,7 +144,8 @@ function GatoSVG({ estado }) {
         <circle cx="77"  cy={104+pyOff} r="5"  fill="white" />
         <circle cx="66"  cy={116+pyOff} r="2.5" fill="white" opacity=".55" />
       </g>
-      <ellipse cx="70"  cy="108" rx="23.5" ry="25.5" fill="#FFF8F0" className="av-palpebra" />
+      <ellipse cx="70"  cy="108" rx="23.5" ry="25.5" fill="#FFF8F0"
+        className={vigia ? 'av-vigia-palpebra' : 'av-palpebra'} />
 
       <ellipse cx="130" cy="108" rx="23" ry="25" fill="white" />
       <g className={pensando ? 'av-pupila-cima' : 'av-pupila-mov'} style={{animationDelay:'.1s'}}>
@@ -131,7 +154,8 @@ function GatoSVG({ estado }) {
         <circle cx="137" cy={104+pyOff} r="5"  fill="white" />
         <circle cx="126" cy={116+pyOff} r="2.5" fill="white" opacity=".55" />
       </g>
-      <ellipse cx="130" cy="108" rx="23.5" ry="25.5" fill="#FFF8F0" className="av-palpebra av-palpebra-r" />
+      <ellipse cx="130" cy="108" rx="23.5" ry="25.5" fill="#FFF8F0"
+        className={vigia ? 'av-vigia-palpebra' : 'av-palpebra av-palpebra-r'} />
 
       {/* Nariz */}
       <polygon points="100,132 93,142 107,142" fill="#FFB5A0" />
@@ -147,6 +171,10 @@ function GatoSVG({ estado }) {
       {/* Boca */}
       {falando
         ? <ellipse cx="100" cy="154" rx="16" ry="8" fill="#FF9999" className="av-boca-fala" />
+        : preocupado
+        ? <path d="M88,154 Q100,145 112,154" stroke="#FF9999" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        : vigia
+        ? <path d="M88,150 Q100,153 112,150" stroke="#FF9999" strokeWidth="2.5" fill="none" strokeLinecap="round" />
         : pensando
         ? <path d="M88,152 Q100,155 112,152" stroke="#FF9999" strokeWidth="2.5" fill="none" strokeLinecap="round" />
         : <path d="M88,150 Q94,157 100,150 Q106,157 112,150" stroke="#FF9999" strokeWidth="2.5" fill="none" strokeLinecap="round" />
@@ -164,9 +192,18 @@ function GatoSVG({ estado }) {
 
 /* ─── ROBÔ ─── */
 function RoboSVG({ estado }) {
-  const pensando = estado === 'pensando';
-  const falando  = estado === 'falando';
-  const pyOff    = pensando ? -5 : 0;
+  const pensando   = estado === 'pensando';
+  const falando    = estado === 'falando';
+  const vigia      = estado === 'vigia';
+  const preocupado = estado === 'preocupado';
+  const pyOff      = pensando ? -5 : 0;
+
+  const browL = preocupado ? 'M44,75 Q64,64 86,71'
+              : pensando   ? 'M44,70 Q66,60 88,66'
+              : 'M46,73 Q66,66 86,72';
+  const browR = preocupado ? 'M114,71 Q136,64 156,75'
+              : pensando   ? 'M112,66 Q134,60 156,70'
+              : 'M114,72 Q134,66 154,73';
 
   return (
     <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"
@@ -197,10 +234,8 @@ function RoboSVG({ estado }) {
       <rect x="28" y="26" width="144" height="154" rx="36" fill="url(#gRobo)" />
 
       {/* Sobrancelhas LED */}
-      <path d={pensando ? 'M44,70 Q66,60 88,66' : 'M46,73 Q66,66 86,72'}
-        stroke="#00DDFF" strokeWidth="3.5" fill="none" strokeLinecap="round" opacity=".85" />
-      <path d={pensando ? 'M112,66 Q134,60 156,70' : 'M114,72 Q134,66 154,73'}
-        stroke="#00DDFF" strokeWidth="3.5" fill="none" strokeLinecap="round" opacity=".85" />
+      <path d={browL} stroke="#00DDFF" strokeWidth="3.5" fill="none" strokeLinecap="round" opacity=".85" />
+      <path d={browR} stroke="#00DDFF" strokeWidth="3.5" fill="none" strokeLinecap="round" opacity=".85" />
 
       {/* Telas dos olhos */}
       <rect x="42"  y="76" width="50" height="50" rx="13" fill="#0A1E30" />
@@ -213,7 +248,8 @@ function RoboSVG({ estado }) {
         <circle cx="74"  cy={ 95+pyOff} r="5"  fill="white" opacity=".9" />
         <circle cx="63"  cy={108+pyOff} r="2.5" fill="white" opacity=".4" />
       </g>
-      <rect x="42" y="76" width="50" height="50" rx="13" fill="#4A7FBD" className="av-palpebra" />
+      <rect x="42" y="76" width="50" height="50" rx="13" fill="#4A7FBD"
+        className={vigia ? 'av-vigia-palpebra' : 'av-palpebra'} />
 
       <g className={pensando ? 'av-pupila-cima' : 'av-pupila-mov'} style={{animationDelay:'.1s'}}>
         <circle cx="133" cy={101+pyOff} r="18" fill="url(#gOlho)" />
@@ -221,7 +257,8 @@ function RoboSVG({ estado }) {
         <circle cx="140" cy={ 95+pyOff} r="5"  fill="white" opacity=".9" />
         <circle cx="129" cy={108+pyOff} r="2.5" fill="white" opacity=".4" />
       </g>
-      <rect x="108" y="76" width="50" height="50" rx="13" fill="#4A7FBD" className="av-palpebra av-palpebra-r" />
+      <rect x="108" y="76" width="50" height="50" rx="13" fill="#4A7FBD"
+        className={vigia ? 'av-vigia-palpebra' : 'av-palpebra av-palpebra-r'} />
 
       {/* Painel da boca */}
       <rect x="55" y="146" width="90" height="26" rx="10" fill="#0A1E30" />
@@ -229,8 +266,12 @@ function RoboSVG({ estado }) {
       {/* Boca */}
       {falando
         ? <ellipse cx="100" cy="159" rx="36" ry="10" fill="#00AAFF" opacity=".85" className="av-boca-fala" />
+        : preocupado
+        ? <path d="M62,166 Q100,155 138,166" stroke="#00DDFF" strokeWidth="3.5" fill="none" strokeLinecap="round" opacity=".85" />
+        : vigia
+        ? <path d="M68,160 Q100,168 132,160" stroke="#00DDFF" strokeWidth="3" fill="none" strokeLinecap="round" opacity=".8" />
         : pensando
-        ? <path d="M66,159 Q100,164 134,159" stroke="#00DDFF" strokeWidth="3"   fill="none" strokeLinecap="round" opacity=".8" />
+        ? <path d="M66,159 Q100,164 134,159" stroke="#00DDFF" strokeWidth="3" fill="none" strokeLinecap="round" opacity=".8" />
         : <path d="M62,159 Q100,174 138,159" stroke="#00DDFF" strokeWidth="4"   fill="none" strokeLinecap="round" opacity=".85" />
       }
 
@@ -247,8 +288,9 @@ function RoboSVG({ estado }) {
 /* ─── COMPONENTE PRINCIPAL ─── */
 export default function Avatar({ estado = 'iniciando', tipo = 'vovo' }) {
   const borda = BORDA[estado] ?? '#444';
-  const pulso = estado === 'ouvindo' ? 'av-pulso-verde'
-              : estado === 'falando' ? 'av-pulso-azul' : '';
+  const pulso = estado === 'ouvindo'    ? 'av-pulso-verde'
+              : estado === 'falando'    ? 'av-pulso-azul'
+              : estado === 'preocupado' ? 'av-pulso-laranja' : '';
   const Comp  = tipo === 'gato' ? GatoSVG : tipo === 'robo' ? RoboSVG : VovoSVG;
 
   return (
@@ -284,21 +326,28 @@ export default function Avatar({ estado = 'iniciando', tipo = 'vovo' }) {
           0%,100% { box-shadow:0 0 0  0 rgba(52,152,219,.7); }
           55%     { box-shadow:0 0 0 22px rgba(52,152,219,0); }
         }
-        .av-palpebra    { transform-box:fill-box; transform-origin:center top;
-                          animation:av-piscar 4s ease-in-out infinite; }
-        .av-palpebra-r  { animation-delay:.07s; }
-        .av-pupila-mov  { transform-box:fill-box; transform-origin:center center;
-                          animation:av-pupila 7s ease-in-out infinite; }
-        .av-pupila-cima { transform-box:fill-box; transform-origin:center center;
-                          animation:av-pupila-cima 3s ease-in-out infinite; }
-        .av-boca-fala   { transform-box:fill-box; transform-origin:center top;
-                          animation:av-boca-fala .38s ease-in-out infinite; }
+        @keyframes av-pulso-laranja {
+          0%,100% { box-shadow:0 0 0  0 rgba(230,126,34,.7),0 0 0  0 rgba(230,126,34,.25); }
+          55%     { box-shadow:0 0 0 22px rgba(230,126,34,0),0 0 0 44px rgba(230,126,34,0); }
+        }
+        .av-palpebra        { transform-box:fill-box; transform-origin:center top;
+                              animation:av-piscar 4s ease-in-out infinite; }
+        .av-palpebra-r      { animation-delay:.07s; }
+        .av-vigia-palpebra  { transform-box:fill-box; transform-origin:center top;
+                              transform:scaleY(0.5); }
+        .av-pupila-mov      { transform-box:fill-box; transform-origin:center center;
+                              animation:av-pupila 7s ease-in-out infinite; }
+        .av-pupila-cima     { transform-box:fill-box; transform-origin:center center;
+                              animation:av-pupila-cima 3s ease-in-out infinite; }
+        .av-boca-fala       { transform-box:fill-box; transform-origin:center top;
+                              animation:av-boca-fala .38s ease-in-out infinite; }
         .av-dot-1 { animation:av-dot .9s ease-in-out 0s    infinite; }
         .av-dot-2 { animation:av-dot .9s ease-in-out .18s  infinite; }
         .av-dot-3 { animation:av-dot .9s ease-in-out .36s  infinite; }
-        .av-pulso-verde { animation:av-pulso-verde 2.2s ease-in-out infinite; }
-        .av-pulso-azul  { animation:av-pulso-azul   .7s ease-in-out infinite; }
-        .av-wrap        { transition:border-color .5s ease; }
+        .av-pulso-verde   { animation:av-pulso-verde   2.2s ease-in-out infinite; }
+        .av-pulso-azul    { animation:av-pulso-azul     .7s ease-in-out infinite; }
+        .av-pulso-laranja { animation:av-pulso-laranja 2.2s ease-in-out infinite; }
+        .av-wrap          { transition:border-color .5s ease; }
       `}</style>
 
       <div
