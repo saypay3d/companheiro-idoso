@@ -54,7 +54,7 @@ export default function Perfil() {
   });
 
   const [extra, setExtra] = useState({
-    filhos: '', netos: '', outros_familiares: '', nome_cuidador: '',
+    nomes_filhos: '', nomes_netos: '', outros_familiares: '', nome_cuidador: '',
     assuntos_gosta: '', assuntos_evitar: '',
     comidas_favoritas: '', programas_tv: '', musicas: '',
     religiao: '', observacoes: '',
@@ -80,8 +80,8 @@ export default function Perfil() {
           rotina_diaria:         data.rotina_diaria          ?? '',
         });
         setExtra({
-          filhos:            data.filhos            ?? '',
-          netos:             data.netos             ?? '',
+          nomes_filhos:      data.nomes_filhos      ?? '',
+          nomes_netos:       data.nomes_netos       ?? '',
           outros_familiares: data.outros_familiares ?? '',
           nome_cuidador:     data.nome_cuidador     ?? '',
           assuntos_gosta:    data.assuntos_gosta    ?? '',
@@ -233,12 +233,12 @@ export default function Perfil() {
         <h2 style={estiloSecao}>FAMÍLIA</h2>
 
         <Campo label="Filhos — nomes e parentesco">
-          <textarea value={extra.filhos} onChange={e => setE('filhos', e.target.value)}
+          <textarea value={extra.nomes_filhos} onChange={e => setE('nomes_filhos', e.target.value)}
             placeholder="Ex: Ana (filha mais velha), Roberto (filho caçula)..." style={estiloTextarea} />
         </Campo>
 
         <Campo label="Netos — nomes">
-          <textarea value={extra.netos} onChange={e => setE('netos', e.target.value)}
+          <textarea value={extra.nomes_netos} onChange={e => setE('nomes_netos', e.target.value)}
             placeholder="Ex: Pedro (15 anos), Clara (8 anos)..." style={estiloTextarea} />
         </Campo>
 
