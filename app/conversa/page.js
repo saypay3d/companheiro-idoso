@@ -134,6 +134,18 @@ export default function Conversa() {
       synth.speak(u);
     });
 
+    async function salvarAtividadeNoturna(tipo, descricao) {
+      try {
+        await fetch('/api/atividade-noturna', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario_id: usuarioIdRef.current, tipo, descricao }),
+        });
+      } catch (e) {
+        console.error('[atividade_noturna] erro ao salvar:', e.message);
+      }
+    }
+
     function agendarProximaAcao() {
       clearTimeout(timerPuxarRef.current);
       if (isNoite()) {
@@ -155,6 +167,7 @@ export default function Conversa() {
       }
       modoVigiaRef.current = true;
       setEstado('vigia');
+      salvarAtividadeNoturna('silencio', 'Sem atividade por 30 minutos');
     }
 
     async function puxarConversa() {
@@ -229,10 +242,17 @@ export default function Conversa() {
       rec.continuous     = false;
       rec.interimResults = false;
 
+      // Rastreia se som foi detectado nesta sessão (para distinguir barulho de silêncio)
+      let detectouSom = false;
+
       rec.onstart = () => {
         if (!modoVigiaRef.current && puxarSemRespostaRef.current < MAX_PUXAR_SEM_RESPOSTA) {
           setEstado('ouvindo');
         }
+      };
+
+      rec.onspeechstart = () => {
+        if (isNoite()) detectouSom = true;
       };
 
       rec.onresult = (e) => {
@@ -240,9 +260,11 @@ export default function Conversa() {
         if (r.isFinal) {
           const texto = r[0].transcript.trim();
           if (texto) {
+            detectouSom = false; // converteu em conversa, não barulho
             pausarRef.current = true;
             rec.stop();
             modoVigiaRef.current = false;
+            if (isNoite()) salvarAtividadeNoturna('conversa', texto.slice(0, 300));
             enviarParaIA(texto, isNoite());
           }
         }
@@ -253,6 +275,10 @@ export default function Conversa() {
       };
 
       rec.onend = () => {
+        if (detectouSom) {
+          salvarAtividadeNoturna('barulho', 'Som detectado sem palavras reconhecidas');
+          detectouSom = false;
+        }
         if (!pausarRef.current) setTimeout(iniciarEscuta, 300);
       };
 
