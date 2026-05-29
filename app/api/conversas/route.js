@@ -3,9 +3,8 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 const MODELOS = [
-  'deepseek/deepseek-v4-flash:free',
-  'google/gemma-4-31b-it:free',
-  'meta-llama/llama-4-maverick:free',
+  'openrouter/auto',
+  'nousresearch/hermes-3-llama-3.1-405b:free',
 ];
 
 export async function POST(req) {
