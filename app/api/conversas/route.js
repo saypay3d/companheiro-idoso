@@ -7,16 +7,28 @@ export async function POST(req) {
 
   console.log('[conversas] usuario_id:', usuario_id, 'mensagem:', mensagem_usuario);
   console.log('[conversas] OPENROUTER_API_KEY presente:', !!process.env.OPENROUTER_API_KEY);
-  console.log('[conversas] Primeiros 8 chars da key:', process.env.OPENROUTER_API_KEY?.slice(0, 8));
 
-  const usuario = await sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`;
-  const nome = usuario[0]?.nome || 'amiga';
+  const [usuarioRows, historico] = await Promise.all([
+    sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
+    sql`SELECT mensagem_usuario, mensagem_ia FROM conversas WHERE usuario_id = ${usuario_id} ORDER BY timestamp DESC LIMIT 5`,
+  ]);
 
-  const systemPrompt = `Você é um companheiro amigável de uma senhora idosa de 91 anos chamada ${nome}. Responda de forma curta, carinhosa e em português.`;
-  const mensagem = mensagem_usuario;
+  const nome = usuarioRows[0]?.nome || 'amiga';
+
+  const systemPrompt = `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa como um amigo próximo faria. NÃO use expressões repetitivas como "minha querida" ou "querida" a todo momento. Varie o tom: às vezes pergunte como ela está, às vezes conte uma curiosidade interessante, às vezes puxe assunto sobre o dia. Respostas curtas de 1 a 2 frases no máximo. Fale em português brasileiro informal.`;
+
+  const mensagensHistorico = historico.reverse().flatMap(c => [
+    { role: 'user', content: c.mensagem_usuario },
+    { role: 'assistant', content: c.mensagem_ia },
+  ]);
+
+  const mensagens = [
+    { role: 'system', content: systemPrompt },
+    ...mensagensHistorico,
+    { role: 'user', content: mensagem_usuario },
+  ];
 
   const MODELOS = ['deepseek/deepseek-v4-flash:free', 'google/gemma-4-31b-it:free'];
-  const mensagens = [{ role: 'user', content: `${systemPrompt}\n\n${mensagem}` }];
 
   let orData = null;
   let modeloUsado = null;
