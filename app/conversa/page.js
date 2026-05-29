@@ -16,6 +16,56 @@ export default function Conversa() {
   const [inputCalib,  setInputCalib]  = useState('');
   const router = useRouter();
 
+  // Wake Lock — mantém a tela sempre ligada
+  useEffect(() => {
+    let wakeLock = null;
+    let fallbackVideo = null;
+
+    function ativarFallbackVideo() {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        const stream = canvas.captureStream(1);
+        fallbackVideo = document.createElement('video');
+        fallbackVideo.srcObject = stream;
+        fallbackVideo.muted = true;
+        fallbackVideo.loop = true;
+        fallbackVideo.play().catch(() => {});
+        console.log('[wakeLock] fallback de vídeo ativo');
+      } catch (e) {
+        console.warn('[wakeLock] fallback de vídeo falhou:', e);
+      }
+    }
+
+    async function ativarWakeLock() {
+      if (!navigator.wakeLock) { ativarFallbackVideo(); return; }
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        console.log('[wakeLock] ativo');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } catch (err) {
+        console.warn('[wakeLock] falhou, usando fallback de vídeo:', err);
+        ativarFallbackVideo();
+      }
+    }
+
+    async function aoVoltarVisibilidade() {
+      if (document.visibilityState === 'visible' && !wakeLock) {
+        await ativarWakeLock();
+      }
+    }
+
+    ativarWakeLock();
+    document.addEventListener('visibilitychange', aoVoltarVisibilidade);
+
+    return () => {
+      document.removeEventListener('visibilitychange', aoVoltarVisibilidade);
+      wakeLock?.release().catch(() => {});
+      if (fallbackVideo) { fallbackVideo.pause(); fallbackVideo.srcObject = null; }
+    };
+  }, []);
+
   const pausarRef           = useRef(false);
   const usuarioIdRef        = useRef(null);
   const recRef              = useRef(null);
