@@ -7,19 +7,6 @@ const MODELOS = [
   'deepseek/deepseek-v4-flash:free',
 ];
 
-const LABELS_CAMPO = {
-  filhos:            'filhos',
-  netos:             'netos',
-  outros_familiares: 'outros familiares importantes',
-  nome_cuidador:     'cuidador',
-  assuntos_gosta:    'assuntos que gosta de conversar',
-  assuntos_evitar:   'assuntos que deve evitar na conversa',
-  comidas_favoritas: 'comidas favoritas',
-  programas_tv:      'programas de TV favoritos',
-  musicas:           'músicas que gosta',
-  religiao:          'religião',
-  observacoes:       'observações extras',
-};
 
 export async function POST(req) {
   const { usuario_id, mensagem_usuario, modo_noite, puxar } = await req.json();
@@ -45,7 +32,7 @@ export async function POST(req) {
   try {
     perfilCompleto = await sql`
       SELECT campo, valor FROM perfil_completo
-      WHERE usuario_id = ${usuario_id} AND valor != ''
+      WHERE usuario_id = ${usuario_id}
       ORDER BY campo ASC`;
   } catch (e) {
     console.warn('[perfil_completo] tabela indisponível ou erro:', e.message);
@@ -53,13 +40,15 @@ export async function POST(req) {
 
   const nome = usuarioRows[0]?.nome || 'amiga';
 
-  const perfilBruto = perfilCompleto.length > 0
-    ? perfilCompleto.map(p => `${LABELS_CAMPO[p.campo] || p.campo}: ${p.valor}`).join('; ')
+  const perfilLinhas = perfilCompleto
+    .filter(p => p.valor && p.valor.trim() !== '')
+    .map(p => `${p.campo}: ${p.valor}`)
+    .join('; ');
+  const perfilTexto = perfilLinhas
+    ? '\n\nInformações importantes sobre essa pessoa: ' + perfilLinhas
     : '';
-  const perfilTruncado = perfilBruto.length > 500 ? perfilBruto.slice(0, 500) + '...' : perfilBruto;
-  const perfilTexto = perfilTruncado
-    ? '\n\nInformações sobre essa pessoa (use naturalmente quando relevante, sem parecer que lê uma ficha): ' + perfilTruncado
-    : '';
+
+  console.log('[perfil_completo] linhas encontradas:', perfilCompleto.length, '| com valor:', perfilLinhas ? 'sim' : 'não');
 
   const memoriaBruta = perfil.length > 0
     ? perfil.map(p => `${p.tipo}: ${p.valor}`).join('; ')
@@ -69,7 +58,6 @@ export async function POST(req) {
     ? '\n\nAprendeu nas conversas anteriores: ' + memoriaTruncada
     : '';
 
-  console.log('[perfil_completo] campos:', perfilCompleto.length, '| chars:', perfilTruncado.length);
   console.log('[memoria] itens:', perfil.length, '| chars:', memoriaTruncada.length);
 
   const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem. Responda em no máximo 15 palavras de forma direta e natural.';
