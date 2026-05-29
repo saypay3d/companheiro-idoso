@@ -169,6 +169,16 @@ export default function Configurar() {
           Iniciar Conversa
         </button>
 
+        {/* Relatório noturno */}
+        <div style={{ marginTop: '28px' }}>
+          <button
+            onClick={() => router.push('/relatorio')}
+            style={{ background: 'transparent', border: 'none', color: '#444', fontSize: '15px', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
+          >
+            Relatório Noturno
+          </button>
+        </div>
+
       </div>
     </>
   );
