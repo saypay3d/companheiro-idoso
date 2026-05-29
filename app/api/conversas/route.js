@@ -2,7 +2,6 @@ import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL);
 
-// openrouter/auto primeiro — roteamento automático é mais robusto
 const MODELOS = [
   'openrouter/auto',
   'deepseek/deepseek-v4-flash:free',
@@ -25,10 +24,13 @@ const LABELS_CAMPO = {
 export async function POST(req) {
   const { usuario_id, mensagem_usuario, modo_noite, puxar } = await req.json();
 
-  console.log('[conversas] usuario_id:', usuario_id, '| puxar:', puxar, '| mensagem:', mensagem_usuario);
-  console.log('[conversas] OPENROUTER_API_KEY presente:', !!process.env.OPENROUTER_API_KEY);
+  // Log dos primeiros 10 caracteres da chave para confirmar que está presente
+  const keyPreview = (process.env.OPENROUTER_API_KEY || '').slice(0, 10);
+  console.log('[conversas] usuario_id:', usuario_id, '| puxar:', puxar);
+  console.log('[conversas] API key preview:', keyPreview || '(VAZIA — variável não configurada!)');
 
-  const [usuarioRows, historico, perfil, perfilCompleto] = await Promise.all([
+  // Busca dados do banco — perfil_completo com fallback caso a tabela não exista
+  const [usuarioRows, historico, perfil] = await Promise.all([
     sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
     sql`SELECT mensagem_usuario, mensagem_ia FROM conversas
         WHERE usuario_id = ${usuario_id} AND mensagem_usuario != '[puxar]'
@@ -36,14 +38,21 @@ export async function POST(req) {
     sql`SELECT tipo, valor FROM perfil_usuario
         WHERE usuario_id = ${usuario_id}
         ORDER BY data_criacao ASC`,
-    sql`SELECT campo, valor FROM perfil_completo
-        WHERE usuario_id = ${usuario_id} AND valor != ''
-        ORDER BY campo ASC`,
   ]);
+
+  // perfil_completo isolado para não derrubar a rota se a tabela não existir
+  let perfilCompleto = [];
+  try {
+    perfilCompleto = await sql`
+      SELECT campo, valor FROM perfil_completo
+      WHERE usuario_id = ${usuario_id} AND valor != ''
+      ORDER BY campo ASC`;
+  } catch (e) {
+    console.warn('[perfil_completo] tabela indisponível ou erro:', e.message);
+  }
 
   const nome = usuarioRows[0]?.nome || 'amiga';
 
-  // Limita a 500 chars para não inflar o prompt
   const perfilBruto = perfilCompleto.length > 0
     ? perfilCompleto.map(p => `${LABELS_CAMPO[p.campo] || p.campo}: ${p.valor}`).join('; ')
     : '';
@@ -52,7 +61,6 @@ export async function POST(req) {
     ? '\n\nInformações sobre essa pessoa (use naturalmente quando relevante, sem parecer que lê uma ficha): ' + perfilTruncado
     : '';
 
-  // Limita memória dinâmica a 300 chars
   const memoriaBruta = perfil.length > 0
     ? perfil.map(p => `${p.tipo}: ${p.valor}`).join('; ')
     : '';
@@ -61,7 +69,7 @@ export async function POST(req) {
     ? '\n\nAprendeu nas conversas anteriores: ' + memoriaTruncada
     : '';
 
-  console.log('[perfil-completo] campos:', perfilCompleto.length, '| chars:', perfilTruncado.length);
+  console.log('[perfil_completo] campos:', perfilCompleto.length, '| chars:', perfilTruncado.length);
   console.log('[memoria] itens:', perfil.length, '| chars:', memoriaTruncada.length);
 
   const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem. Responda em no máximo 15 palavras de forma direta e natural.';
@@ -72,7 +80,7 @@ export async function POST(req) {
     ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
     : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
 
-  console.log('[conversas] system prompt total chars:', systemPrompt.length);
+  console.log('[conversas] system prompt chars:', systemPrompt.length);
 
   const mensagensHistorico = historico.reverse().flatMap(c => [
     { role: 'user',      content: c.mensagem_usuario },
@@ -91,7 +99,10 @@ export async function POST(req) {
 
   for (const modelo of MODELOS) {
     console.log('[conversas] Tentando modelo:', modelo);
+
     let orRes, rawText, data;
+
+    // 1. Fetch
     try {
       orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -101,40 +112,60 @@ export async function POST(req) {
         },
         body: JSON.stringify({ model: modelo, messages: mensagens, max_tokens: 150 }),
       });
-      rawText = await orRes.text();
-      data = JSON.parse(rawText);
-    } catch (err) {
-      const detalhe = {
-        modelo,
-        status: orRes?.status ?? 'network_error',
-        statusText: orRes?.statusText ?? '',
-        erro: err.message,
-        body: rawText?.slice(0, 400) ?? '',
-      };
-      console.error('[conversas] Erro de rede/parse com', modelo, JSON.stringify(detalhe));
+    } catch (fetchErr) {
+      const detalhe = { modelo, status: 'network_error', erro: fetchErr.message };
+      console.error('[conversas] Erro de rede com', modelo, detalhe);
       erros.push(detalhe);
       continue;
     }
 
-    console.log('[conversas] HTTP', orRes.status, '| modelo:', modelo);
+    console.log('[conversas] HTTP', orRes.status, orRes.statusText, '| modelo:', modelo);
 
+    // 2. Lê o body como texto primeiro
+    try {
+      rawText = await orRes.text();
+    } catch (textErr) {
+      const detalhe = { modelo, status: orRes.status, erro: 'falha ao ler body: ' + textErr.message };
+      console.error('[conversas]', detalhe);
+      erros.push(detalhe);
+      continue;
+    }
+
+    // 3. Verifica se veio algo
+    if (!rawText || rawText.trim() === '') {
+      const detalhe = { modelo, status: orRes.status, erro: 'body vazio' };
+      console.error('[conversas] Body vazio com', modelo, '| HTTP', orRes.status);
+      erros.push(detalhe);
+      continue;
+    }
+
+    // 4. Parse JSON
+    try {
+      data = JSON.parse(rawText);
+    } catch (parseErr) {
+      const detalhe = { modelo, status: orRes.status, erro: 'JSON inválido: ' + parseErr.message, body: rawText.slice(0, 400) };
+      console.error('[conversas] JSON inválido com', modelo, detalhe);
+      erros.push(detalhe);
+      continue;
+    }
+
+    // 5. Verifica se a resposta tem conteúdo
     const conteudo = data.choices?.[0]?.message?.content;
     if (orRes.ok && conteudo && conteudo.trim().length > 0) {
       orData = data;
       modeloUsado = modelo;
-      console.log('[conversas] Sucesso com modelo:', modeloUsado, '| resposta:', conteudo.trim());
+      console.log('[conversas] Sucesso com', modeloUsado, '| resposta:', conteudo.trim());
       break;
     }
 
     const detalhe = {
       modelo,
       status: orRes.status,
-      statusText: orRes.statusText,
       erro: data.error?.message ?? data.error?.code ?? '(sem campo error)',
       choices0: JSON.stringify(data.choices?.[0] ?? null),
-      body: rawText?.slice(0, 400),
+      body: rawText.slice(0, 400),
     };
-    console.error('[conversas] Falhou com', modelo, JSON.stringify(detalhe));
+    console.error('[conversas] Sem conteúdo válido com', modelo, JSON.stringify(detalhe));
     erros.push(detalhe);
   }
 
