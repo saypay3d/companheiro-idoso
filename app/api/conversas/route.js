@@ -30,27 +30,35 @@ export async function POST(req) {
     { role: 'user', content: mensagem_usuario },
   ];
 
-  const MODELOS = ['deepseek/deepseek-v4-flash:free', 'google/gemma-4-31b-it:free'];
+  const MODELOS = [
+    'deepseek/deepseek-v4-flash:free',
+    'google/gemma-4-31b-it:free',
+    'meta-llama/llama-4-maverick:free',
+  ];
 
   let orData = null;
   let modeloUsado = null;
 
   for (const modelo of MODELOS) {
-    const body = { model: modelo, messages: mensagens };
     console.log('[conversas] Tentando modelo:', modelo);
+    let orRes, data;
+    try {
+      orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: modelo, messages: mensagens }),
+      });
+      data = await orRes.json();
+    } catch (fetchErr) {
+      console.error('[conversas] Erro de rede com', modelo, ':', fetchErr.message);
+      continue;
+    }
 
-    const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    console.log('[conversas] Status:', orRes.status, 'modelo:', modelo);
-    const data = await orRes.json();
-    console.log('[conversas] Resposta:', JSON.stringify(data));
+    console.log('[conversas] Status:', orRes.status, '| modelo:', modelo);
+    console.log('[conversas] Body:', JSON.stringify(data));
 
     if (orRes.ok && data.choices?.[0]?.message?.content) {
       orData = data;
