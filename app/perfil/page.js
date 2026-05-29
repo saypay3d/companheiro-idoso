@@ -103,18 +103,11 @@ export default function Perfil() {
     setSalvando(true);
     setSalvo(false);
     try {
-      await Promise.all([
-        fetch('/api/perfil', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usuario_id: usuarioId, ...form }),
-        }),
-        fetch('/api/perfil-completo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usuario_id: usuarioId, ...extra }),
-        }),
-      ]);
+      await fetch('/api/perfil', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario_id: usuarioId, ...form, ...extra }),
+      });
       setSalvo(true);
       setTimeout(() => setSalvo(false), 3000);
     } finally {
