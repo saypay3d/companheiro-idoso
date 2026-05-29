@@ -96,15 +96,29 @@ export default function Conversa() {
       return h >= 21 || h < 7;
     }
 
+    // Carrega vozes de forma assíncrona e guarda em ref
+    const vozesRef = { current: window.speechSynthesis.getVoices() };
+
+    function carregarVozes() {
+      const todas = window.speechSynthesis.getVoices();
+      vozesRef.current = todas;
+      console.log('[vozes] total disponível:', todas.length);
+      todas.forEach(v => console.log('[voz]', v.lang, '|', v.name));
+    }
+
+    carregarVozes();
+    window.speechSynthesis.onvoiceschanged = carregarVozes;
+
     function selecionarVoz(u) {
       const vozTipo = localStorage.getItem('voz_tipo') || 'feminina';
-      const vozes = window.speechSynthesis.getVoices();
-      if (!vozes.length) return;
-      const pt = vozes.filter(v => v.lang.startsWith('pt'));
-      if (!pt.length) return;
+      const todas = vozesRef.current;
+      if (!todas.length) return;
+      const pt = todas.filter(v => v.lang.startsWith('pt'));
+      const pool = pt.length ? pt : todas;
       const voz = vozTipo === 'masculina'
-        ? (pt.find(v => /ricardo|carlos|male|masc/i.test(v.name)) || pt[pt.length - 1])
-        : (pt.find(v => /luciana|maria|female|fem/i.test(v.name))  || pt[0]);
+        ? (pool.find(v => /male|paulo|daniel/i.test(v.name)) || pool[pool.length - 1])
+        : (pool.find(v => /female|maria|francisca/i.test(v.name)) || pool[0]);
+      console.log('[vozes] selecionada:', voz?.name, '| tipo:', vozTipo);
       if (voz) u.voice = voz;
     }
 
