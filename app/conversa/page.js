@@ -7,8 +7,10 @@ export default function Conversa() {
   const [input, setInput] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [usuarioId, setUsuarioId] = useState(null);
+  const [gravando, setGravando] = useState(false);
   const fimRef = useRef(null);
   const router = useRouter();
+  const reconhecimentoRef = useRef(null);
 
   useEffect(() => {
     const id = localStorage.getItem('usuario_id');
@@ -29,6 +31,42 @@ export default function Conversa() {
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensagens]);
+
+  const toggleMicrofone = () => {
+    if (gravando) {
+      reconhecimentoRef.current?.stop();
+      setGravando(false);
+      return;
+    }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      alert('Seu navegador não suporta reconhecimento de voz. Use o Google Chrome.');
+      return;
+    }
+
+    const rec = new SR();
+    rec.lang = 'pt-BR';
+    rec.continuous = false;
+    rec.interimResults = false;
+
+    rec.onstart = () => setGravando(true);
+
+    rec.onresult = (e) => {
+      const texto = e.results[0][0].transcript;
+      setInput(prev => (prev ? prev + ' ' + texto : texto));
+    };
+
+    rec.onerror = (e) => {
+      console.error('Erro no microfone:', e.error);
+      setGravando(false);
+    };
+
+    rec.onend = () => setGravando(false);
+
+    reconhecimentoRef.current = rec;
+    rec.start();
+  };
 
   const enviar = async () => {
     if (!input.trim() || carregando) return;
@@ -104,20 +142,41 @@ export default function Conversa() {
         <div ref={fimRef} />
       </div>
 
-      <div style={{ display: 'flex', gap: '12px' }}>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'stretch' }}>
+        <button
+          onClick={toggleMicrofone}
+          disabled={carregando}
+          title={gravando ? 'Parar gravação' : 'Falar por voz'}
+          style={{
+            fontSize: '36px',
+            width: '72px',
+            minHeight: '72px',
+            backgroundColor: gravando ? '#cc0000' : '#2a6e2a',
+            color: 'white',
+            border: 'none',
+            borderRadius: '12px',
+            cursor: carregando ? 'default' : 'pointer',
+            flexShrink: 0,
+            boxShadow: gravando ? '0 0 0 4px #ff4444' : 'none',
+            transition: 'box-shadow 0.3s',
+          }}
+        >
+          {gravando ? '⏹' : '🎤'}
+        </button>
+
         <input
           type="text"
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && enviar()}
-          placeholder="Digite aqui..."
+          placeholder={gravando ? 'Ouvindo...' : 'Digite ou use o microfone...'}
           disabled={carregando}
           style={{
             flex: 1,
             fontSize: '22px',
             padding: '16px',
             borderRadius: '10px',
-            border: 'none',
+            border: gravando ? '2px solid #cc0000' : 'none',
             backgroundColor: '#2a2a2a',
             color: 'white',
             outline: 'none',
@@ -139,6 +198,12 @@ export default function Conversa() {
           Enviar
         </button>
       </div>
+
+      {gravando && (
+        <p style={{ textAlign: 'center', color: '#ff6666', fontSize: '20px', marginTop: '12px' }}>
+          🔴 Ouvindo... Fale agora e clique em ⏹ para parar.
+        </p>
+      )}
     </div>
   );
 }

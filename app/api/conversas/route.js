@@ -39,7 +39,7 @@ export async function POST(req) {
       'X-Title': 'Companheiro Idoso',
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      model: 'google/gemma-3-4b-it:free',
       messages,
       max_tokens: 512,
       temperature: 0.7,
@@ -47,7 +47,16 @@ export async function POST(req) {
   });
 
   const orData = await orRes.json();
-  const mensagem_ia = orData.choices?.[0]?.message?.content ?? 'Desculpe, não consegui responder agora.';
+
+  if (!orRes.ok || !orData.choices?.[0]?.message?.content) {
+    console.error('OpenRouter error:', JSON.stringify(orData));
+    return Response.json(
+      { resposta: 'Tive um probleminha para responder. Tente de novo!' },
+      { status: 200 }
+    );
+  }
+
+  const mensagem_ia = orData.choices[0].message.content.trim();
 
   await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia) VALUES (${usuario_id}, ${mensagem_usuario}, ${mensagem_ia})`;
 
