@@ -15,7 +15,7 @@ export async function POST(req) {
   const systemPrompt = `Você é um companheiro amigável de uma senhora idosa de 91 anos chamada ${nome}. Responda de forma curta, carinhosa e em português.`;
   const mensagem = mensagem_usuario;
 
-  const MODELOS = ['google/gemma-2-9b-it:free', 'meta-llama/llama-3.1-8b-instruct:free'];
+  const MODELOS = ['deepseek/deepseek-v4-flash:free', 'google/gemma-4-31b-it:free'];
   const mensagens = [{ role: 'user', content: `${systemPrompt}\n\n${mensagem}` }];
 
   let orData = null;
