@@ -169,13 +169,19 @@ export default function Configurar() {
           Iniciar Conversa
         </button>
 
-        {/* Relatório noturno */}
-        <div style={{ marginTop: '28px' }}>
+        {/* Links discretos */}
+        <div style={{ marginTop: '28px', display: 'flex', gap: '24px', justifyContent: 'center' }}>
           <button
             onClick={() => router.push('/relatorio')}
             style={{ background: 'transparent', border: 'none', color: '#444', fontSize: '15px', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
           >
             Relatório Noturno
+          </button>
+          <button
+            onClick={() => router.push('/contatos')}
+            style={{ background: 'transparent', border: 'none', color: '#444', fontSize: '15px', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
+          >
+            Contatos
           </button>
         </div>
 
