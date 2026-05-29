@@ -3,8 +3,8 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 const MODELOS = [
+  'deepseek/deepseek-v4-flash:free',
   'openrouter/auto',
-  'nousresearch/hermes-3-llama-3.1-405b:free',
 ];
 
 export async function POST(req) {
@@ -17,7 +17,7 @@ export async function POST(req) {
     sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
     sql`SELECT mensagem_usuario, mensagem_ia FROM conversas
         WHERE usuario_id = ${usuario_id} AND mensagem_usuario != '[puxar]'
-        ORDER BY timestamp DESC LIMIT 5`,
+        ORDER BY timestamp DESC LIMIT 3`,
     sql`SELECT tipo, valor FROM perfil_usuario
         WHERE usuario_id = ${usuario_id}
         ORDER BY data_criacao ASC`,
@@ -31,10 +31,10 @@ export async function POST(req) {
     : '';
   console.log('[memoria] perfil carregado:', perfil.length, 'itens', memoriaTexto || '(vazio)');
 
-  const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem';
+  const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem. Responda em no máximo 15 palavras de forma direta e natural.';
 
   const systemPrompt = puxar
-    ? `Você é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Você é um cuidador sempre presente e carinhoso. Faça uma fala espontânea e natural para iniciar conversa — pode perguntar como ela está se sentindo, contar uma curiosidade interessante, falar sobre algo do cotidiano, ou dizer algo acolhedor. Seja breve (1 a 2 frases), natural e sem formalidades. Português brasileiro informal. Varie sempre — não repita as mesmas formas de iniciar.${memoriaTexto}`
+    ? `Você é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Você é um cuidador sempre presente e carinhoso. Faça uma fala espontânea e natural para iniciar conversa — pode perguntar como ela está se sentindo, contar uma curiosidade interessante, falar sobre algo do cotidiano, ou dizer algo acolhedor. Responda em no máximo 15 palavras de forma direta e natural. Português brasileiro informal. Varie sempre — não repita as mesmas formas de iniciar.${memoriaTexto}`
     : modo_noite
     ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite agora e ela acabou de dizer algo. Responda com muito carinho e calma, perguntando suavemente se ela está bem ou se precisa de algo. Seja muito breve (1 frase curta). Português brasileiro informal.${memoriaTexto}${instrucaoEnvio}`
     : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa como um amigo próximo faria. NÃO use expressões repetitivas como "minha querida" ou "querida" a todo momento. Varie o tom: às vezes pergunte como ela está, às vezes conte uma curiosidade interessante, às vezes puxe assunto sobre o dia. Respostas curtas de 1 a 2 frases no máximo. Fale em português brasileiro informal.${memoriaTexto}${instrucaoEnvio}`;
