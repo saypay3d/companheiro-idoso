@@ -102,10 +102,10 @@ export default function Conversa() {
       try { recRef.current?.stop(); } catch (e) {}
       setEstado('pensando');
       try {
-        const res  = await fetch('/api/puxar', {
+        const res  = await fetch('/api/conversas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usuario_id: usuarioIdRef.current }),
+          body: JSON.stringify({ usuario_id: usuarioIdRef.current, puxar: true }),
         });
         const data = await res.json();
         if (data.resposta) {
