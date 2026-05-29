@@ -12,6 +12,7 @@ const AVATARES = [
 export default function Configurar() {
   const [avatarEscolhido, setAvatarEscolhido] = useState('vovo');
   const [vozEscolhida, setVozEscolhida]       = useState('feminina');
+  const [nomeUsuario,   setNomeUsuario]        = useState('');
   const router = useRouter();
 
   useEffect(() => {
@@ -20,6 +21,16 @@ export default function Configurar() {
     const vz = localStorage.getItem('voz_tipo');
     if (av) setAvatarEscolhido(av);
     if (vz) setVozEscolhida(vz);
+
+    // Busca o nome para personalizar a saudação
+    const id = localStorage.getItem('usuario_id');
+    fetch('/api/usuarios')
+      .then(r => r.json())
+      .then(data => {
+        const user = data.find(u => String(u.id) === String(id));
+        if (user) setNomeUsuario(user.nome);
+      })
+      .catch(() => {});
   }, [router]);
 
   const comecar = () => {
@@ -53,18 +64,39 @@ export default function Configurar() {
           border-style: solid;
         }
         .cfg-voz:hover { transform: translateY(-2px); }
+        .btn-iniciar {
+          font-size: 32px;
+          padding: 24px 72px;
+          background-color: #0070f3;
+          color: white;
+          border: none;
+          border-radius: 20px;
+          cursor: pointer;
+          font-weight: 700;
+          box-shadow: 0 8px 32px rgba(0,112,243,.6);
+          transition: transform .1s, box-shadow .1s;
+          width: 100%;
+          max-width: 480px;
+          margin-top: 12px;
+        }
+        .btn-iniciar:hover { box-shadow: 0 10px 40px rgba(0,112,243,.75); }
+        .btn-iniciar:active { transform: scale(.97); box-shadow: 0 4px 16px rgba(0,112,243,.5); }
       `}</style>
 
-      <div style={{ maxWidth: '760px', margin: '0 auto', padding: '28px 16px 40px', textAlign: 'center' }}>
+      <div style={{ maxWidth: '760px', margin: '0 auto', padding: '28px 16px 48px', textAlign: 'center' }}>
 
+        {/* Saudação */}
         <h1 style={{ fontSize: '34px', margin: '0 0 6px', color: 'white' }}>
-          Como você quer que eu seja?
+          {nomeUsuario ? `Olá, ${nomeUsuario}!` : 'Olá!'}
         </h1>
-        <p style={{ fontSize: '22px', color: '#777', margin: '0 0 36px' }}>
-          Escolha seu companheiro virtual
+        <p style={{ fontSize: '20px', color: '#666', margin: '0 0 36px' }}>
+          Confirme ou altere suas preferências
         </p>
 
         {/* Seleção de avatar */}
+        <h2 style={{ fontSize: '26px', color: '#bbb', margin: '0 0 18px', fontWeight: 300 }}>
+          Escolha o companheiro:
+        </h2>
         <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', marginBottom: '40px', flexWrap: 'wrap' }}>
           {AVATARES.map(({ tipo, nome, desc }) => {
             const selecionado = avatarEscolhido === tipo;
@@ -86,10 +118,15 @@ export default function Configurar() {
                 }}>
                   <Avatar tipo={tipo} estado="ouvindo" />
                 </div>
-                <p style={{ fontSize: '24px', margin: '0 0 4px', color: selecionado ? '#fff' : '#aaa', fontWeight: selecionado ? 700 : 400 }}>
+                <p style={{ fontSize: '22px', margin: '0 0 4px', color: selecionado ? '#fff' : '#aaa', fontWeight: selecionado ? 700 : 400 }}>
                   {nome}
                 </p>
-                <p style={{ fontSize: '16px', margin: 0, color: selecionado ? '#88aadd' : '#555' }}>
+                {selecionado && (
+                  <p style={{ fontSize: '13px', margin: '4px 0 0', color: '#4a9eff', fontWeight: 600, letterSpacing: '.05em' }}>
+                    ✓ SELECIONADO
+                  </p>
+                )}
+                <p style={{ fontSize: '15px', margin: '4px 0 0', color: selecionado ? '#88aadd' : '#555' }}>
                   {desc}
                 </p>
               </div>
@@ -98,10 +135,10 @@ export default function Configurar() {
         </div>
 
         {/* Seleção de voz */}
-        <h2 style={{ fontSize: '28px', color: '#bbb', margin: '0 0 18px', fontWeight: 300 }}>
+        <h2 style={{ fontSize: '26px', color: '#bbb', margin: '0 0 18px', fontWeight: 300 }}>
           Escolha a voz:
         </h2>
-        <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', marginBottom: '44px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', marginBottom: '48px', flexWrap: 'wrap' }}>
           {[
             { voz: 'feminina', emoji: '🎀', label: 'Voz Feminina' },
             { voz: 'masculina', emoji: '🎵', label: 'Voz Masculina' },
@@ -121,31 +158,17 @@ export default function Configurar() {
                 }}
               >
                 {emoji} {label}
+                {sel && <span style={{ display: 'block', fontSize: '13px', color: '#4a9eff', fontWeight: 600, marginTop: '4px' }}>✓ SELECIONADA</span>}
               </button>
             );
           })}
         </div>
 
-        {/* Botão começar */}
-        <button
-          onClick={comecar}
-          style={{
-            fontSize: '30px',
-            padding: '22px 64px',
-            backgroundColor: '#0070f3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '18px',
-            cursor: 'pointer',
-            fontWeight: 700,
-            boxShadow: '0 6px 24px rgba(0,112,243,.55)',
-            transition: 'transform .1s',
-          }}
-          onMouseDown={e => e.currentTarget.style.transform = 'scale(.97)'}
-          onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-        >
-          Começar! →
+        {/* Botão iniciar */}
+        <button className="btn-iniciar" onClick={comecar}>
+          Iniciar Conversa
         </button>
+
       </div>
     </>
   );
