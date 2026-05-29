@@ -2,54 +2,45 @@ import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL);
 
-const SYSTEM_PROMPT = `Você é um companheiro virtual carinhoso, paciente e alegre para uma pessoa idosa.
-Suas respostas devem ser:
-- Curtas e simples (no máximo 3 frases)
-- Em português brasileiro claro, sem abreviações
-- Calorosas, encorajadoras e positivas
-- Sem jargões técnicos ou palavras difíceis
-- Sempre acolhedoras, nunca negativas ou críticas
-Trate a pessoa com muito respeito, carinho e paciência.`;
-
 export async function POST(req) {
   const { usuario_id, mensagem_usuario } = await req.json();
 
-  const [usuario, historico] = await Promise.all([
-    sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
-    sql`SELECT mensagem_usuario, mensagem_ia FROM conversas WHERE usuario_id = ${usuario_id} ORDER BY timestamp DESC LIMIT 8`,
-  ]);
+  console.log('[conversas] usuario_id:', usuario_id, 'mensagem:', mensagem_usuario);
+  console.log('[conversas] OPENROUTER_API_KEY presente:', !!process.env.OPENROUTER_API_KEY);
+  console.log('[conversas] Primeiros 8 chars da key:', process.env.OPENROUTER_API_KEY?.slice(0, 8));
 
-  const nome = usuario[0]?.nome || 'amigo';
+  const usuario = await sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`;
+  const nome = usuario[0]?.nome || 'amiga';
 
-  const messages = [
-    { role: 'system', content: `${SYSTEM_PROMPT}\nO nome da pessoa é ${nome}.` },
-    ...historico.reverse().flatMap(c => [
-      { role: 'user', content: c.mensagem_usuario },
-      { role: 'assistant', content: c.mensagem_ia },
-    ]),
-    { role: 'user', content: mensagem_usuario },
-  ];
+  const systemPrompt = `Você é um companheiro amigável de uma senhora idosa de 91 anos chamada ${nome}. Responda de forma curta, carinhosa e em português.`;
+  const mensagem = mensagem_usuario;
+
+  const body = {
+    model: 'google/gemma-3-4b-it:free',
+    messages: [
+      { role: 'user', content: `${systemPrompt}\n\n${mensagem}` },
+    ],
+  };
+
+  console.log('[conversas] Enviando para OpenRouter:', JSON.stringify(body));
 
   const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://companheiro-idoso.vercel.app',
-      'X-Title': 'Companheiro Idoso',
     },
-    body: JSON.stringify({
-      model: 'google/gemma-3-4b-it:free',
-      messages,
-      max_tokens: 512,
-      temperature: 0.7,
-    }),
+    body: JSON.stringify(body),
   });
+
+  console.log('[conversas] Status OpenRouter:', orRes.status, orRes.statusText);
 
   const orData = await orRes.json();
 
+  console.log('[conversas] Resposta OpenRouter:', JSON.stringify(orData));
+
   if (!orRes.ok || !orData.choices?.[0]?.message?.content) {
-    console.error('OpenRouter error:', JSON.stringify(orData));
+    console.error('[conversas] ERRO: resposta inválida do OpenRouter');
     return Response.json(
       { resposta: 'Tive um probleminha para responder. Tente de novo!' },
       { status: 200 }
@@ -59,6 +50,8 @@ export async function POST(req) {
   const mensagem_ia = orData.choices[0].message.content.trim();
 
   await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia) VALUES (${usuario_id}, ${mensagem_usuario}, ${mensagem_ia})`;
+
+  console.log('[conversas] Sucesso! Resposta IA:', mensagem_ia);
 
   return Response.json({ resposta: mensagem_ia });
 }
