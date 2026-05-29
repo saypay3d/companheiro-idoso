@@ -205,6 +205,29 @@ export default function Conversa() {
       }
     }
 
+    async function processarEnvioMensagem(nomeContato, mensagem) {
+      try {
+        const r = await fetch(`/api/contatos?usuario_id=${usuarioIdRef.current}`);
+        const contatos = await r.json();
+        const contato = contatos.find(c =>
+          c.nome.toLowerCase().includes(nomeContato.toLowerCase()) ||
+          nomeContato.toLowerCase().includes(c.nome.toLowerCase().split(' ')[0])
+        );
+        if (!contato) {
+          await falar(`Não encontrei ${nomeContato} na lista de contatos.`);
+          return;
+        }
+        const fone = contato.telefone.replace(/\D/g, '');
+        const url  = `https://wa.me/55${fone}?text=${encodeURIComponent(mensagem)}`;
+        window.open(url, '_blank', 'noopener');
+        console.log('[envio_msg] abrindo WhatsApp para', contato.nome, url);
+        await falar(`Abrindo WhatsApp para enviar mensagem para ${contato.nome}!`);
+      } catch (e) {
+        console.error('[envio_msg]', e);
+        await falar('Não consegui abrir o WhatsApp. Tente novamente.');
+      }
+    }
+
     async function enviarParaIA(texto, modoNoite = false) {
       clearTimeout(timerPuxarRef.current);
       puxarSemRespostaRef.current = 0;
@@ -221,7 +244,14 @@ export default function Conversa() {
         });
         const data = await res.json();
         setEstado('falando');
-        await falar(data.resposta);
+
+        // Detecta comando de envio de mensagem WhatsApp
+        const matchEnviar = data.resposta?.match(/ENVIAR_MSG:([^:\n]+):([\s\S]+)/);
+        if (matchEnviar) {
+          await processarEnvioMensagem(matchEnviar[1].trim(), matchEnviar[2].trim());
+        } else {
+          await falar(data.resposta);
+        }
       } catch (e) {
         console.error(e);
       } finally {
