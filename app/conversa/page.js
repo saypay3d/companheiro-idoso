@@ -4,10 +4,10 @@ import { useRouter } from 'next/navigation';
 
 export default function Conversa() {
   const [mensagens, setMensagens] = useState([]);
-  const [input, setInput] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [usuarioId, setUsuarioId] = useState(null);
   const [gravando, setGravando] = useState(false);
+  const [nomeUsuario, setNomeUsuario] = useState('');
   const fimRef = useRef(null);
   const router = useRouter();
   const reconhecimentoRef = useRef(null);
@@ -26,55 +26,23 @@ export default function Conversa() {
         ]);
         setMensagens(msgs);
       });
+
+    fetch(`/api/usuarios`)
+      .then(r => r.json())
+      .then(data => {
+        const user = data.find(u => String(u.id) === String(id));
+        if (user) setNomeUsuario(user.nome);
+      });
   }, [router]);
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensagens]);
 
-  const toggleMicrofone = () => {
-    if (gravando) {
-      reconhecimentoRef.current?.stop();
-      setGravando(false);
-      return;
-    }
-
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-      alert('Seu navegador não suporta reconhecimento de voz. Use o Google Chrome.');
-      return;
-    }
-
-    const rec = new SR();
-    rec.lang = 'pt-BR';
-    rec.continuous = false;
-    rec.interimResults = false;
-
-    rec.onstart = () => setGravando(true);
-
-    rec.onresult = (e) => {
-      const texto = e.results[0][0].transcript;
-      setInput(prev => (prev ? prev + ' ' + texto : texto));
-    };
-
-    rec.onerror = (e) => {
-      console.error('Erro no microfone:', e.error);
-      setGravando(false);
-    };
-
-    rec.onend = () => setGravando(false);
-
-    reconhecimentoRef.current = rec;
-    rec.start();
-  };
-
-  const enviar = async () => {
-    if (!input.trim() || carregando) return;
-    const texto = input.trim();
-    setInput('');
+  const enviarVoz = async (texto) => {
+    if (!texto || carregando) return;
     setMensagens(prev => [...prev, { de: 'usuario', texto }]);
     setCarregando(true);
-
     try {
       const res = await fetch('/api/conversas', {
         method: 'POST',
@@ -88,122 +56,168 @@ export default function Conversa() {
     }
   };
 
+  const toggleMicrofone = () => {
+    if (gravando) {
+      reconhecimentoRef.current?.stop();
+      setGravando(false);
+      return;
+    }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      alert('Use o Google Chrome para ter reconhecimento de voz.');
+      return;
+    }
+
+    const rec = new SR();
+    rec.lang = 'pt-BR';
+    rec.continuous = false;
+    rec.interimResults = false;
+
+    rec.onstart = () => setGravando(true);
+
+    rec.onresult = (e) => {
+      const resultado = e.results[e.results.length - 1];
+      if (resultado.isFinal) {
+        const texto = resultado[0].transcript.trim();
+        if (texto) enviarVoz(texto);
+      }
+    };
+
+    rec.onerror = (e) => {
+      console.error('Erro microfone:', e.error);
+      setGravando(false);
+    };
+
+    rec.onend = () => setGravando(false);
+
+    reconhecimentoRef.current = rec;
+    rec.start();
+  };
+
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1 style={{ fontSize: '36px', margin: 0 }}>Seu Companheiro</h1>
-        <button
-          onClick={() => router.push('/')}
-          style={{ fontSize: '20px', padding: '10px 20px', backgroundColor: '#444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-        >
-          ← Voltar
-        </button>
-      </div>
+    <>
+      <style>{`
+        @keyframes pulsar {
+          0%   { box-shadow: 0 0 0 0 rgba(204, 0, 0, 0.7); }
+          70%  { box-shadow: 0 0 0 30px rgba(204, 0, 0, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(204, 0, 0, 0); }
+        }
+        .mic-pulsando {
+          animation: pulsar 1.2s infinite;
+        }
+      `}</style>
 
-      <div style={{
-        backgroundColor: '#2a2a2a',
-        borderRadius: '12px',
-        padding: '20px',
-        minHeight: '400px',
-        maxHeight: '62vh',
-        overflowY: 'auto',
-        marginBottom: '20px',
-      }}>
-        {mensagens.length === 0 && !carregando && (
-          <p style={{ color: '#888', textAlign: 'center', fontSize: '22px', marginTop: '60px' }}>
-            Olá! Diga alguma coisa para começarmos a conversar.
+      <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', height: '100vh', padding: '0 16px', boxSizing: 'border-box' }}>
+
+        {/* Cabeçalho */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0 8px' }}>
+          <h1 style={{ fontSize: '30px', margin: 0 }}>Seu Companheiro</h1>
+          <button
+            onClick={() => router.push('/')}
+            style={{ fontSize: '22px', padding: '10px 20px', backgroundColor: '#444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+          >
+            ← Voltar
+          </button>
+        </div>
+
+        {/* Avatar */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0 12px' }}>
+          <div style={{
+            width: '180px',
+            height: '180px',
+            borderRadius: '50%',
+            backgroundColor: carregando ? '#555' : gravando ? '#3a0000' : '#1a3a5c',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '100px',
+            border: `5px solid ${gravando ? '#cc0000' : carregando ? '#888' : '#0070f3'}`,
+            transition: 'border-color 0.4s, background-color 0.4s',
+            userSelect: 'none',
+          }}>
+            {carregando ? '💭' : gravando ? '👂' : '🤗'}
+          </div>
+          {nomeUsuario && (
+            <p style={{ fontSize: '24px', margin: '10px 0 0', color: '#aaa' }}>
+              Olá, {nomeUsuario}!
+            </p>
+          )}
+        </div>
+
+        {/* Mensagens */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          backgroundColor: '#2a2a2a',
+          borderRadius: '16px',
+          padding: '20px',
+          marginBottom: '16px',
+        }}>
+          {mensagens.length === 0 && !carregando && (
+            <p style={{ color: '#888', textAlign: 'center', fontSize: '24px', marginTop: '40px' }}>
+              Aperte o microfone e fale comigo! 😊
+            </p>
+          )}
+
+          {mensagens.map((msg, i) => (
+            <div key={i} style={{ marginBottom: '16px', textAlign: msg.de === 'usuario' ? 'right' : 'left' }}>
+              <span style={{
+                display: 'inline-block',
+                backgroundColor: msg.de === 'usuario' ? '#0070f3' : '#3a3a3a',
+                padding: '14px 20px',
+                borderRadius: '18px',
+                maxWidth: '82%',
+                fontSize: '24px',
+                lineHeight: '1.6',
+                textAlign: 'left',
+              }}>
+                {msg.texto}
+              </span>
+            </div>
+          ))}
+
+          {carregando && (
+            <div style={{ textAlign: 'left', marginBottom: '16px' }}>
+              <span style={{ backgroundColor: '#3a3a3a', padding: '14px 20px', borderRadius: '18px', fontSize: '24px' }}>
+                ✦ ✦ ✦
+              </span>
+            </div>
+          )}
+
+          <div ref={fimRef} />
+        </div>
+
+        {/* Botão de microfone */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: '32px', gap: '14px' }}>
+          <button
+            onClick={toggleMicrofone}
+            disabled={carregando}
+            className={gravando ? 'mic-pulsando' : ''}
+            style={{
+              width: '140px',
+              height: '140px',
+              borderRadius: '50%',
+              backgroundColor: gravando ? '#cc0000' : carregando ? '#555' : '#1a7a1a',
+              border: 'none',
+              cursor: carregando ? 'default' : 'pointer',
+              fontSize: '64px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background-color 0.3s',
+              userSelect: 'none',
+            }}
+          >
+            {gravando ? '⏹' : '🎤'}
+          </button>
+
+          <p style={{ fontSize: '24px', margin: 0, color: gravando ? '#ff6666' : carregando ? '#aaa' : '#888', textAlign: 'center' }}>
+            {gravando ? '🔴 Ouvindo... fale agora!' : carregando ? 'Pensando...' : 'Toque para falar'}
           </p>
-        )}
+        </div>
 
-        {mensagens.map((msg, i) => (
-          <div key={i} style={{ marginBottom: '16px', textAlign: msg.de === 'usuario' ? 'right' : 'left' }}>
-            <span style={{
-              display: 'inline-block',
-              backgroundColor: msg.de === 'usuario' ? '#0070f3' : '#444',
-              padding: '14px 20px',
-              borderRadius: '14px',
-              maxWidth: '78%',
-              fontSize: '22px',
-              lineHeight: '1.5',
-              textAlign: 'left',
-            }}>
-              {msg.texto}
-            </span>
-          </div>
-        ))}
-
-        {carregando && (
-          <div style={{ textAlign: 'left', marginBottom: '16px' }}>
-            <span style={{ backgroundColor: '#444', padding: '14px 20px', borderRadius: '14px', fontSize: '22px' }}>
-              ✦ ✦ ✦
-            </span>
-          </div>
-        )}
-        <div ref={fimRef} />
       </div>
-
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'stretch' }}>
-        <button
-          onClick={toggleMicrofone}
-          disabled={carregando}
-          title={gravando ? 'Parar gravação' : 'Falar por voz'}
-          style={{
-            fontSize: '36px',
-            width: '72px',
-            minHeight: '72px',
-            backgroundColor: gravando ? '#cc0000' : '#2a6e2a',
-            color: 'white',
-            border: 'none',
-            borderRadius: '12px',
-            cursor: carregando ? 'default' : 'pointer',
-            flexShrink: 0,
-            boxShadow: gravando ? '0 0 0 4px #ff4444' : 'none',
-            transition: 'box-shadow 0.3s',
-          }}
-        >
-          {gravando ? '⏹' : '🎤'}
-        </button>
-
-        <input
-          type="text"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && enviar()}
-          placeholder={gravando ? 'Ouvindo...' : 'Digite ou use o microfone...'}
-          disabled={carregando}
-          style={{
-            flex: 1,
-            fontSize: '22px',
-            padding: '16px',
-            borderRadius: '10px',
-            border: gravando ? '2px solid #cc0000' : 'none',
-            backgroundColor: '#2a2a2a',
-            color: 'white',
-            outline: 'none',
-          }}
-        />
-        <button
-          onClick={enviar}
-          disabled={carregando || !input.trim()}
-          style={{
-            fontSize: '22px',
-            padding: '16px 32px',
-            backgroundColor: carregando ? '#555' : '#0070f3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '10px',
-            cursor: carregando ? 'default' : 'pointer',
-          }}
-        >
-          Enviar
-        </button>
-      </div>
-
-      {gravando && (
-        <p style={{ textAlign: 'center', color: '#ff6666', fontSize: '20px', marginTop: '12px' }}>
-          🔴 Ouvindo... Fale agora e clique em ⏹ para parar.
-        </p>
-      )}
-    </div>
+    </>
   );
 }
