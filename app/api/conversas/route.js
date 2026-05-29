@@ -86,6 +86,46 @@ export async function POST(req) {
   await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia)
             VALUES (${usuario_id}, ${mensagemSalva}, ${mensagem_ia})`;
 
+  // Extração de memória de longo prazo — apenas para mensagens reais do usuário
+  if (!puxar && mensagem_usuario) {
+    try {
+      const extractRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'openrouter/auto',
+          messages: [{
+            role: 'user',
+            content: `Analise esta mensagem e extraia dados pessoais relevantes como nomes de familiares, gostos, reclamações de saúde, hábitos, emoções. Responda APENAS em JSON assim: {"dados": [{"tipo": string, "valor": string}]} Se não houver nada relevante responda {"dados": []}\n\nMensagem: "${mensagem_usuario}"`,
+          }],
+        }),
+      });
+      const extractData = await extractRes.json();
+      const raw = extractData.choices?.[0]?.message?.content ?? '';
+      console.log('[memoria] resposta bruta:', raw);
+
+      const json = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(json);
+
+      if (Array.isArray(parsed.dados) && parsed.dados.length > 0) {
+        for (const item of parsed.dados) {
+          if (item.tipo && item.valor) {
+            await sql`INSERT INTO perfil_usuario (usuario_id, tipo, valor)
+                      VALUES (${usuario_id}, ${String(item.tipo)}, ${String(item.valor)})`;
+          }
+        }
+        console.log('[memoria] salvo:', parsed.dados.length, 'itens para usuario', usuario_id);
+      } else {
+        console.log('[memoria] nada relevante extraído');
+      }
+    } catch (e) {
+      console.error('[memoria] erro na extração (não bloqueia resposta):', e.message);
+    }
+  }
+
   return Response.json({ resposta: mensagem_ia });
 }
 
