@@ -1,5 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 
+const sql = neon(process.env.DATABASE_URL);
+
 const SYSTEM_PROMPT = `Você é um companheiro virtual carinhoso, paciente e alegre para uma pessoa idosa.
 Suas respostas devem ser:
 - Curtas e simples (no máximo 3 frases)
@@ -10,15 +12,11 @@ Suas respostas devem ser:
 Trate a pessoa com muito respeito, carinho e paciência.`;
 
 export async function POST(req) {
-  const sql = neon(process.env.DATABASE_URL);
   const { usuario_id, mensagem_usuario } = await req.json();
 
   const [usuario, historico] = await Promise.all([
-    sql('SELECT nome FROM usuarios WHERE id = $1', [usuario_id]),
-    sql(
-      'SELECT mensagem_usuario, mensagem_ia FROM conversas WHERE usuario_id = $1 ORDER BY timestamp DESC LIMIT 8',
-      [usuario_id]
-    ),
+    sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
+    sql`SELECT mensagem_usuario, mensagem_ia FROM conversas WHERE usuario_id = ${usuario_id} ORDER BY timestamp DESC LIMIT 8`,
   ]);
 
   const nome = usuario[0]?.nome || 'amigo';
@@ -51,21 +49,14 @@ export async function POST(req) {
   const orData = await orRes.json();
   const mensagem_ia = orData.choices?.[0]?.message?.content ?? 'Desculpe, não consegui responder agora.';
 
-  await sql(
-    'INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia) VALUES ($1, $2, $3)',
-    [usuario_id, mensagem_usuario, mensagem_ia]
-  );
+  await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia) VALUES (${usuario_id}, ${mensagem_usuario}, ${mensagem_ia})`;
 
   return Response.json({ resposta: mensagem_ia });
 }
 
 export async function GET(req) {
-  const sql = neon(process.env.DATABASE_URL);
   const { searchParams } = new URL(req.url);
   const usuario_id = searchParams.get('usuario_id');
-  const result = await sql(
-    'SELECT mensagem_usuario, mensagem_ia, timestamp FROM conversas WHERE usuario_id = $1 ORDER BY timestamp ASC',
-    [usuario_id]
-  );
+  const result = await sql`SELECT mensagem_usuario, mensagem_ia, timestamp FROM conversas WHERE usuario_id = ${usuario_id} ORDER BY timestamp ASC`;
   return Response.json(result);
 }
