@@ -14,7 +14,7 @@ export default function Home() {
     });
     const user = await res.json();
     localStorage.setItem('usuario_id', user.id);
-    router.push('/conversa');
+    router.push('/configurar');
   };
 
   return (

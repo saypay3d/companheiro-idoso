@@ -3,21 +3,22 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Avatar from '../components/Avatar';
 
-const DORMIR_APOS_MS = 45000; // 45s sem interação
+const DORMIR_APOS_MS = 45000;
 
 export default function Conversa() {
-  const [estado, setEstado]         = useState('iniciando');
+  const [estado,      setEstado]      = useState('iniciando');
   const [nomeUsuario, setNomeUsuario] = useState('');
+  const [avatarTipo,  setAvatarTipo]  = useState('vovo');
   const [semSupporte, setSemSupporte] = useState(false);
-  const [modoCalib, setModoCalib]   = useState(false);
-  const [inputCalib, setInputCalib] = useState('');
+  const [modoCalib,   setModoCalib]   = useState(false);
+  const [inputCalib,  setInputCalib]  = useState('');
   const router = useRouter();
 
-  const pausarRef       = useRef(false);
-  const usuarioIdRef    = useRef(null);
-  const recRef          = useRef(null);
-  const enviarRef       = useRef(null);
-  const timerDormirRef  = useRef(null);
+  const pausarRef      = useRef(false);
+  const usuarioIdRef   = useRef(null);
+  const recRef         = useRef(null);
+  const enviarRef      = useRef(null);
+  const timerDormirRef = useRef(null);
 
   function agendarSono() {
     clearTimeout(timerDormirRef.current);
@@ -29,6 +30,9 @@ export default function Conversa() {
     if (!id) { router.push('/'); return; }
     usuarioIdRef.current = id;
 
+    const tipo = localStorage.getItem('avatar_tipo') || 'vovo';
+    setAvatarTipo(tipo);
+
     fetch('/api/usuarios')
       .then(r => r.json())
       .then(data => {
@@ -36,12 +40,25 @@ export default function Conversa() {
         if (user) setNomeUsuario(user.nome);
       });
 
+    function selecionarVoz(u) {
+      const vozTipo = localStorage.getItem('voz_tipo') || 'feminina';
+      const vozes = window.speechSynthesis.getVoices();
+      if (!vozes.length) return;
+      const pt = vozes.filter(v => v.lang.startsWith('pt'));
+      if (!pt.length) return;
+      const voz = vozTipo === 'masculina'
+        ? (pt.find(v => /ricardo|carlos|male|masc/i.test(v.name)) || pt[pt.length - 1])
+        : (pt.find(v => /luciana|maria|female|fem/i.test(v.name))  || pt[0]);
+      if (voz) u.voice = voz;
+    }
+
     const falar = (texto) => new Promise((resolve) => {
       const synth = window.speechSynthesis;
       synth.cancel();
       const u = new SpeechSynthesisUtterance(texto);
       u.lang = 'pt-BR';
       u.rate = 0.8;
+      selecionarVoz(u);
       u.onend  = resolve;
       u.onerror = resolve;
       synth.speak(u);
@@ -75,9 +92,9 @@ export default function Conversa() {
       if (!SR) { setSemSupporte(true); return; }
 
       const rec = new SR();
-      rec.lang            = 'pt-BR';
-      rec.continuous      = false;
-      rec.interimResults  = false;
+      rec.lang           = 'pt-BR';
+      rec.continuous     = false;
+      rec.interimResults = false;
 
       rec.onstart = () => setEstado('ouvindo');
 
@@ -145,26 +162,26 @@ export default function Conversa() {
   }[estado] ?? '#555';
 
   return (
-    <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a1a', overflow: 'hidden' }}>
+    <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', backgroundColor:'#1a1a1a', overflow:'hidden' }}>
 
       {/* Barra superior */}
-      <div style={{ position: 'absolute', top: 16, left: 16, right: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 20 }}>
+      <div style={{ position:'absolute', top:16, left:16, right:16, display:'flex', justifyContent:'space-between', alignItems:'flex-start', zIndex:20 }}>
         <button
-          onClick={() => { pausarRef.current = true; try { recRef.current?.stop(); } catch (e) {} window.speechSynthesis?.cancel(); router.push('/'); }}
-          style={{ fontSize: '18px', padding: '8px 14px', background: 'transparent', color: '#555', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer' }}
+          onClick={() => { pausarRef.current=true; try{recRef.current?.stop();}catch(e){} window.speechSynthesis?.cancel(); router.push('/configurar'); }}
+          style={{ fontSize:'18px', padding:'8px 14px', background:'transparent', color:'#555', border:'1px solid #333', borderRadius:'8px', cursor:'pointer' }}
         >
-          ← Sair
+          ← Voltar
         </button>
-        <div style={{ position: 'relative' }}>
+        <div style={{ position:'relative' }}>
           <button
             onClick={() => setModoCalib(v => !v)}
-            style={{ fontSize: '16px', padding: '8px 12px', background: 'transparent', color: '#444', border: '1px solid #2a2a2a', borderRadius: '8px', cursor: 'pointer' }}
+            style={{ fontSize:'16px', padding:'8px 12px', background:'transparent', color:'#444', border:'1px solid #2a2a2a', borderRadius:'8px', cursor:'pointer' }}
           >
             Calibração
           </button>
           {modoCalib && (
-            <div style={{ position: 'absolute', top: 44, right: 0, backgroundColor: '#242424', border: '1px solid #333', borderRadius: '12px', padding: '16px', width: '300px', zIndex: 30 }}>
-              <p style={{ fontSize: '16px', color: '#888', margin: '0 0 10px' }}>Modo texto (teste)</p>
+            <div style={{ position:'absolute', top:44, right:0, backgroundColor:'#242424', border:'1px solid #333', borderRadius:'12px', padding:'16px', width:'300px', zIndex:30 }}>
+              <p style={{ fontSize:'16px', color:'#888', margin:'0 0 10px' }}>Modo texto (teste)</p>
               <input
                 type="text"
                 value={inputCalib}
@@ -172,11 +189,11 @@ export default function Conversa() {
                 onKeyDown={e => e.key === 'Enter' && calibEnviar()}
                 placeholder="Digite uma mensagem..."
                 autoFocus
-                style={{ width: '100%', fontSize: '18px', padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#333', color: 'white', boxSizing: 'border-box', outline: 'none' }}
+                style={{ width:'100%', fontSize:'18px', padding:'10px', borderRadius:'8px', border:'none', backgroundColor:'#333', color:'white', boxSizing:'border-box', outline:'none' }}
               />
               <button
                 onClick={calibEnviar}
-                style={{ marginTop: '10px', width: '100%', fontSize: '18px', padding: '10px', backgroundColor: '#0070f3', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+                style={{ marginTop:'10px', width:'100%', fontSize:'18px', padding:'10px', backgroundColor:'#0070f3', color:'white', border:'none', borderRadius:'8px', cursor:'pointer' }}
               >
                 Enviar
               </button>
@@ -187,18 +204,18 @@ export default function Conversa() {
 
       {/* Nome */}
       {nomeUsuario && (
-        <p style={{ fontSize: '26px', color: '#666', margin: '0 0 24px', letterSpacing: '.03em' }}>
+        <p style={{ fontSize:'26px', color:'#666', margin:'0 0 24px', letterSpacing:'.03em' }}>
           Olá, {nomeUsuario}!
         </p>
       )}
 
-      {/* Avatar SVG */}
-      <div style={{ width: 'clamp(260px, 55vh, 420px)', height: 'clamp(260px, 55vh, 420px)' }}>
-        <Avatar estado={estado} />
+      {/* Avatar */}
+      <div style={{ width:'clamp(260px, 55vh, 420px)', height:'clamp(260px, 55vh, 420px)' }}>
+        <Avatar estado={estado} tipo={avatarTipo} />
       </div>
 
       {/* Status */}
-      <p style={{ fontSize: '28px', fontWeight: 300, margin: '28px 0 0', color: semSupporte ? '#e74c3c' : statusCor, textAlign: 'center', transition: 'color .5s ease', letterSpacing: '.04em', padding: '0 24px' }}>
+      <p style={{ fontSize:'28px', fontWeight:300, margin:'28px 0 0', color: semSupporte ? '#e74c3c' : statusCor, textAlign:'center', transition:'color .5s ease', letterSpacing:'.04em', padding:'0 24px' }}>
         {semSupporte ? '⚠️ Use o Google Chrome para ativar o microfone' : statusTexto}
       </p>
 
