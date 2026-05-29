@@ -63,7 +63,7 @@ export async function POST(req) {
           'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model: modelo, messages: mensagens }),
+        body: JSON.stringify({ model: modelo, messages: mensagens, max_tokens: 100 }),
       });
       data = await orRes.json();
     } catch (fetchErr) {
@@ -97,10 +97,9 @@ export async function POST(req) {
   await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia)
             VALUES (${usuario_id}, ${mensagemSalva}, ${mensagem_ia})`;
 
-  // Extração de memória de longo prazo — apenas para mensagens reais do usuário
+  // Extração de memória — fire-and-forget, não bloqueia a resposta
   if (!puxar && mensagem_usuario) {
-    try {
-      const promptExtracao = `Você é um extrator de informações pessoais. Analise a mensagem abaixo e extraia dados relevantes sobre a pessoa que falou.
+    const promptExtracao = `Você é um extrator de informações pessoais. Analise a mensagem abaixo e extraia dados relevantes sobre a pessoa que falou.
 
 Categorias possíveis: familiar, gosto, saúde, hábito, emoção, preferência, evento.
 
@@ -114,36 +113,34 @@ Responda APENAS com o JSON válido, sem texto adicional, sem markdown.
 
 Mensagem: "${mensagem_usuario}"`;
 
-      const extractRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'openrouter/auto',
-          messages: [{ role: 'user', content: promptExtracao }],
-        }),
-      });
-      const extractData = await extractRes.json();
-      const raw = extractData.choices?.[0]?.message?.content ?? '';
-      console.log('[memoria] resposta bruta:', raw);
-
-      // Remove markdown code blocks se o modelo os incluir
-      const jsonStr = raw.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(jsonStr);
-
-      if (Array.isArray(parsed.dados) && parsed.dados.length > 0) {
+    fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: promptExtracao }],
+      }),
+    })
+      .then(r => r.json())
+      .then(async extractData => {
+        const raw = extractData.choices?.[0]?.message?.content ?? '';
+        console.log('[memoria] resposta bruta:', raw);
+        const jsonStr = raw.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(jsonStr);
+        if (!Array.isArray(parsed.dados) || parsed.dados.length === 0) {
+          console.log('[memoria] nada relevante extraído');
+          return;
+        }
         for (const item of parsed.dados) {
           if (!item.tipo || !item.valor) continue;
           const tipo  = String(item.tipo).slice(0, 100);
           const valor = String(item.valor).slice(0, 500);
-
-          // Deduplicação: não salva se já existe o mesmo tipo+valor para este usuário
           const existe = await sql`
             SELECT 1 FROM perfil_usuario
-            WHERE usuario_id = ${usuario_id} AND tipo = ${tipo} AND valor = ${valor}
-            LIMIT 1`;
+            WHERE usuario_id = ${usuario_id} AND tipo = ${tipo} AND valor = ${valor} LIMIT 1`;
           if (existe.length === 0) {
             await sql`INSERT INTO perfil_usuario (usuario_id, tipo, valor)
                       VALUES (${usuario_id}, ${tipo}, ${valor})`;
@@ -152,12 +149,8 @@ Mensagem: "${mensagem_usuario}"`;
             console.log('[memoria] já existe, ignorando:', tipo, '->', valor);
           }
         }
-      } else {
-        console.log('[memoria] nada relevante extraído');
-      }
-    } catch (e) {
-      console.error('[memoria] erro na extração (não bloqueia resposta):', e.message);
-    }
+      })
+      .catch(e => console.error('[memoria] erro na extração:', e.message));
   }
 
   return Response.json({ resposta: mensagem_ia });
