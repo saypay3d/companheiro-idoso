@@ -65,25 +65,35 @@ export default function Perfil() {
     if (!id) { router.push('/'); return; }
     setUsuarioId(id);
 
-    Promise.all([
-      fetch(`/api/perfil?usuario_id=${id}`).then(r => r.json()),
-      fetch(`/api/perfil-completo?usuario_id=${id}`).then(r => r.json()),
-    ]).then(([base, completo]) => {
-      if (base.usuario_id) {
+    fetch(`/api/perfil?usuario_id=${id}`)
+      .then(r => r.json())
+      .then(data => {
         setForm({
-          nome_completo:         base.nome_completo         ?? '',
-          idade:                 base.idade                 ?? '',
-          apelido:               base.apelido               ?? '',
-          condicao_fisica:       base.condicao_fisica        ?? 'Caminha sozinho',
-          doencas:               base.doencas               ?? '',
-          medicamentos:          base.medicamentos           ?? '',
-          limitacoes_fisicas:    base.limitacoes_fisicas     ?? '',
-          limitacoes_cognitivas: base.limitacoes_cognitivas  ?? '',
-          rotina_diaria:         base.rotina_diaria          ?? '',
+          nome_completo:         data.nome_completo         ?? '',
+          idade:                 data.idade                 ?? '',
+          apelido:               data.apelido               ?? '',
+          condicao_fisica:       data.condicao_fisica        ?? 'Caminha sozinho',
+          doencas:               data.doencas               ?? '',
+          medicamentos:          data.medicamentos           ?? '',
+          limitacoes_fisicas:    data.limitacoes_fisicas     ?? '',
+          limitacoes_cognitivas: data.limitacoes_cognitivas  ?? '',
+          rotina_diaria:         data.rotina_diaria          ?? '',
         });
-      }
-      setExtra(e => ({ ...e, ...completo }));
-    }).catch(() => {});
+        setExtra({
+          filhos:            data.filhos            ?? '',
+          netos:             data.netos             ?? '',
+          outros_familiares: data.outros_familiares ?? '',
+          nome_cuidador:     data.nome_cuidador     ?? '',
+          assuntos_gosta:    data.assuntos_gosta    ?? '',
+          assuntos_evitar:   data.assuntos_evitar   ?? '',
+          comidas_favoritas: data.comidas_favoritas ?? '',
+          programas_tv:      data.programas_tv      ?? '',
+          musicas:           data.musicas           ?? '',
+          religiao:          data.religiao          ?? '',
+          observacoes:       data.observacoes       ?? '',
+        });
+      })
+      .catch(() => {});
   }, [router]);
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));

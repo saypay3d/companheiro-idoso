@@ -5,9 +5,16 @@ const sql = neon(process.env.DATABASE_URL);
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const usuario_id = searchParams.get('usuario_id');
-  const [row] = await sql`
-    SELECT * FROM perfil_cuidador WHERE usuario_id = ${usuario_id}`;
-  return Response.json(row ?? {});
+
+  const [rows, perfilCompleto] = await Promise.all([
+    sql`SELECT * FROM perfil_cuidador WHERE usuario_id = ${usuario_id}`,
+    sql`SELECT campo, valor FROM perfil_completo
+        WHERE usuario_id = ${usuario_id} AND valor != ''`,
+  ]);
+
+  const base  = rows[0] ?? {};
+  const extra = Object.fromEntries(perfilCompleto.map(p => [p.campo, p.valor]));
+  return Response.json({ ...base, ...extra });
 }
 
 export async function POST(req) {
