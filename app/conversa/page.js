@@ -14,6 +14,10 @@ export default function Conversa() {
   const [semSupporte, setSemSupporte] = useState(false);
   const [modoCalib,   setModoCalib]   = useState(false);
   const [inputCalib,  setInputCalib]  = useState('');
+  const [noturno,     setNoturno]     = useState(() => {
+    const h = new Date().getHours();
+    return h >= 21 || h < 7;
+  });
   const router = useRouter();
 
   // Wake Lock — mantém a tela sempre ligada
@@ -256,6 +260,16 @@ export default function Conversa() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Overlay noturno — verifica a hora a cada minuto
+  useEffect(() => {
+    function verificar() {
+      const h = new Date().getHours();
+      setNoturno(h >= 21 || h < 7);
+    }
+    const intervalo = setInterval(verificar, 60000);
+    return () => clearInterval(intervalo);
+  }, []);
+
   const calibEnviar = () => {
     const texto = inputCalib.trim();
     if (!texto || !enviarRef.current) return;
@@ -340,6 +354,11 @@ export default function Conversa() {
       <p style={{ fontSize:'28px', fontWeight:300, margin:'28px 0 0', color: semSupporte ? '#e74c3c' : statusCor, textAlign:'center', transition:'color .5s ease', letterSpacing:'.04em', padding:'0 24px' }}>
         {semSupporte ? '⚠️ Use o Google Chrome para ativar o microfone' : statusTexto}
       </p>
+
+      {/* Overlay noturno */}
+      {noturno && (
+        <div style={{ position:'fixed', inset:0, backgroundColor:'black', opacity:0.6, pointerEvents:'none', zIndex:50, transition:'opacity 1s ease' }} />
+      )}
 
     </div>
   );
