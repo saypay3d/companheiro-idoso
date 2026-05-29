@@ -1,10 +1,14 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function Home() {
   const [nome, setNome] = useState('');
   const router = useRouter();
+
+  useEffect(() => {
+    if (localStorage.getItem('usuario_id')) router.push('/configurar');
+  }, [router]);
 
   const iniciar = async () => {
     const res = await fetch('/api/usuarios', {
