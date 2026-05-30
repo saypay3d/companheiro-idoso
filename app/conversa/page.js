@@ -189,17 +189,23 @@ export default function Conversa() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ usuario_id: usuarioIdRef.current, puxar: true }),
         });
-        const data = await res.json();
-        if (data.debug) {
-          const resumo = data.debug.erros?.map(e => `[${e.modelo}] HTTP ${e.status} — ${e.erro}`).join(' | ');
-          console.error('[puxar] debug:', resumo);
-          setErroDebug(resumo);
+        if (!res.ok) {
+          const txt = await res.text();
+          setErroDebug(`HTTP ${res.status}: ${txt.slice(0, 200)}`);
+          console.error('[puxar] resposta não-ok:', res.status, txt.slice(0, 200));
         } else {
-          setErroDebug(null);
-        }
-        if (data.resposta) {
-          setEstado('falando');
-          await falar(data.resposta);
+          const data = await res.json();
+          if (data.debug) {
+            const resumo = data.debug.erros?.map(e => `[${e.modelo}] HTTP ${e.status} — ${e.erro}`).join(' | ');
+            console.error('[puxar] debug:', resumo);
+            setErroDebug(resumo);
+          } else {
+            setErroDebug(null);
+          }
+          if (data.resposta) {
+            setEstado('falando');
+            await falar(data.resposta);
+          }
         }
       } catch (e) {
         setErroDebug('Erro de rede: ' + e.message);
@@ -252,22 +258,27 @@ export default function Conversa() {
             modo_noite: modoNoite,
           }),
         });
-        const data = await res.json();
-
-        if (data.debug) {
-          const resumo = data.debug.erros?.map(e => `[${e.modelo}] HTTP ${e.status} — ${e.erro}`).join(' | ');
-          console.error('[enviar] debug:', resumo);
-          setErroDebug(resumo);
-        }
-
-        if (data.resposta) {
-          setEstado('falando');
-          // Detecta comando de envio de mensagem WhatsApp
-          const matchEnviar = data.resposta.match(/ENVIAR_MSG:([^:\n]+):([\s\S]+)/);
-          if (matchEnviar) {
-            await processarEnvioMensagem(matchEnviar[1].trim(), matchEnviar[2].trim());
+        if (!res.ok) {
+          const txt = await res.text();
+          setErroDebug(`HTTP ${res.status}: ${txt.slice(0, 200)}`);
+          console.error('[enviar] resposta não-ok:', res.status, txt.slice(0, 200));
+        } else {
+          const data = await res.json();
+          if (data.debug) {
+            const resumo = data.debug.erros?.map(e => `[${e.modelo}] HTTP ${e.status} — ${e.erro}`).join(' | ');
+            console.error('[enviar] debug:', resumo);
+            setErroDebug(resumo);
           } else {
-            await falar(data.resposta);
+            setErroDebug(null);
+          }
+          if (data.resposta) {
+            setEstado('falando');
+            const matchEnviar = data.resposta.match(/ENVIAR_MSG:([^:\n]+):([\s\S]+)/);
+            if (matchEnviar) {
+              await processarEnvioMensagem(matchEnviar[1].trim(), matchEnviar[2].trim());
+            } else {
+              await falar(data.resposta);
+            }
           }
         }
       } catch (e) {
