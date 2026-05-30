@@ -5,8 +5,8 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 const MODELOS = [
-  'deepseek/deepseek-v4-flash:free',
   'google/gemma-4-31b-it:free',
+  'deepseek/deepseek-v4-flash:free',
   'minimax/minimax-m2.5:free',
   'nousresearch/hermes-3-llama-3.1-405b:free',
   'meta-llama/llama-4-maverick:free',
@@ -27,7 +27,7 @@ export async function POST(req) {
     sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
     sql`SELECT mensagem_usuario, mensagem_ia FROM conversas
         WHERE usuario_id = ${usuario_id} AND mensagem_usuario != '[puxar]'
-        ORDER BY timestamp DESC LIMIT 3`,
+        ORDER BY timestamp DESC LIMIT 2`,
     sql`SELECT tipo, valor FROM perfil_usuario
         WHERE usuario_id = ${usuario_id}
         ORDER BY data_criacao ASC`,
@@ -83,7 +83,7 @@ export async function POST(req) {
       perfil.map(p => `${p.tipo}: ${p.valor}`).join('\n')
     : '';
 
-  console.log('[memoria] itens:', perfil.length, '| chars:', memoriaTruncada.length);
+  console.log('[memoria] itens:', perfil.length);
 
   const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem. Responda em no máximo 15 palavras de forma direta e natural.';
 
@@ -93,7 +93,8 @@ export async function POST(req) {
     ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
     : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
 
-  console.log('[conversas] system prompt chars:', systemPrompt.length);
+  const systemPromptFinal = systemPrompt.length > 500 ? systemPrompt.slice(0, 500) : systemPrompt;
+  console.log('[conversas] system prompt chars:', systemPromptFinal.length);
 
   const mensagensHistorico = historico.reverse().flatMap(c => [
     { role: 'user',      content: c.mensagem_usuario },
@@ -101,7 +102,7 @@ export async function POST(req) {
   ]);
 
   const mensagens = [
-    { role: 'system', content: systemPrompt },
+    { role: 'system', content: systemPromptFinal },
     ...mensagensHistorico,
     { role: 'user', content: puxar ? '[inicie a conversa agora espontaneamente]' : mensagem_usuario },
   ];
