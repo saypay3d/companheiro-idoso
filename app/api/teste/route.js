@@ -1,10 +1,14 @@
 const MODELOS = [
-  'deepseek/deepseek-v4-flash:free',
   'google/gemma-4-31b-it:free',
-  'minimax/minimax-m2.5:free',
+  'deepseek/deepseek-v4-flash:free',
   'nousresearch/hermes-3-llama-3.1-405b:free',
-  'meta-llama/llama-4-maverick:free',
-  'qwen/qwen3-4b:free',
+  'mistralai/mistral-7b-instruct:free',
+  'meta-llama/llama-3.1-8b-instruct:free',
+  'meta-llama/llama-3.2-3b-instruct:free',
+  'qwen/qwen-2-7b-instruct:free',
+  'microsoft/phi-3-mini-128k-instruct:free',
+  'google/gemma-2-9b-it:free',
+  'openchat/openchat-7b:free',
 ];
 
 export async function GET() {
