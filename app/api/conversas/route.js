@@ -7,7 +7,10 @@ const sql = neon(process.env.DATABASE_URL);
 const MODELOS = [
   'deepseek/deepseek-v4-flash:free',
   'google/gemma-4-31b-it:free',
+  'minimax/minimax-m2.5:free',
   'nousresearch/hermes-3-llama-3.1-405b:free',
+  'meta-llama/llama-4-maverick:free',
+  'qwen/qwen3-4b:free',
 ];
 
 
