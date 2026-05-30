@@ -5,8 +5,9 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 const MODELOS = [
-  'openrouter/auto',
   'deepseek/deepseek-v4-flash:free',
+  'google/gemma-4-31b-it:free',
+  'nousresearch/hermes-3-llama-3.1-405b:free',
 ];
 
 
@@ -23,7 +24,7 @@ export async function POST(req) {
     sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
     sql`SELECT mensagem_usuario, mensagem_ia FROM conversas
         WHERE usuario_id = ${usuario_id} AND mensagem_usuario != '[puxar]'
-        ORDER BY timestamp DESC LIMIT 10`,
+        ORDER BY timestamp DESC LIMIT 3`,
     sql`SELECT tipo, valor FROM perfil_usuario
         WHERE usuario_id = ${usuario_id}
         ORDER BY data_criacao ASC`,
@@ -66,7 +67,9 @@ export async function POST(req) {
     ].filter(Boolean);
 
     if (partes.length > 0) {
-      perfilTexto = '\n\nInformações importantes sobre essa pessoa:\n' + partes.join('\n');
+      const textoCompleto = partes.join('\n');
+      const textoCortado = textoCompleto.length > 300 ? textoCompleto.slice(0, 300) + '...' : textoCompleto;
+      perfilTexto = '\n\nInformações sobre essa pessoa:\n' + textoCortado;
     }
   }
 
