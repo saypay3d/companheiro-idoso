@@ -21,7 +21,7 @@ export async function POST(req) {
     sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
     sql`SELECT mensagem_usuario, mensagem_ia FROM conversas
         WHERE usuario_id = ${usuario_id} AND mensagem_usuario != '[puxar]'
-        ORDER BY timestamp DESC LIMIT 3`,
+        ORDER BY timestamp DESC LIMIT 10`,
     sql`SELECT tipo, valor FROM perfil_usuario
         WHERE usuario_id = ${usuario_id}
         ORDER BY data_criacao ASC`,
@@ -70,12 +70,9 @@ export async function POST(req) {
 
   console.log('[perfil_cuidador] carregado:', !!perfilCuidador, '| campos preenchidos:', perfilTexto ? perfilTexto.split('\n').length - 2 : 0);
 
-  const memoriaBruta = perfil.length > 0
-    ? perfil.map(p => `${p.tipo}: ${p.valor}`).join('; ')
-    : '';
-  const memoriaTruncada = memoriaBruta.length > 300 ? memoriaBruta.slice(0, 300) + '...' : memoriaBruta;
-  const memoriaTexto = memoriaTruncada
-    ? '\n\nAprendeu nas conversas anteriores: ' + memoriaTruncada
+  const memoriaTexto = perfil.length > 0
+    ? '\n\nMemórias aprendidas sobre essa pessoa:\n' +
+      perfil.map(p => `${p.tipo}: ${p.valor}`).join('\n')
     : '';
 
   console.log('[memoria] itens:', perfil.length, '| chars:', memoriaTruncada.length);
