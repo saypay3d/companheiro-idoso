@@ -29,11 +29,7 @@ export async function POST(req) {
 
   let perfilCuidador = null;
   try {
-    const rows = await sql`
-      SELECT nome_completo, idade, apelido, condicao_fisica, doencas,
-             medicamentos, limitacoes_fisicas, limitacoes_cognitivas, rotina_diaria
-      FROM perfil_cuidador
-      WHERE usuario_id = ${usuario_id}`;
+    const rows = await sql`SELECT * FROM perfil_cuidador WHERE usuario_id = ${usuario_id}`;
     perfilCuidador = rows[0] ?? null;
   } catch (e) {
     console.warn('[perfil_cuidador] erro ao buscar:', e.message);
@@ -43,25 +39,36 @@ export async function POST(req) {
 
   let perfilTexto = '';
   if (perfilCuidador) {
-    const campos = {
-      'nome': perfilCuidador.nome_completo,
-      'idade': perfilCuidador.idade,
-      'apelido': perfilCuidador.apelido,
-      'condição física': perfilCuidador.condicao_fisica,
-      'doenças': perfilCuidador.doencas,
-      'medicamentos': perfilCuidador.medicamentos,
-      'limitações físicas': perfilCuidador.limitacoes_fisicas,
-      'limitações cognitivas': perfilCuidador.limitacoes_cognitivas,
-      'rotina diária': perfilCuidador.rotina_diaria,
-    };
-    const linhas = Object.entries(campos)
-      .filter(([, v]) => v && String(v).trim() !== '')
-      .map(([k, v]) => `${k}: ${v}`)
-      .join('; ');
-    if (linhas) perfilTexto = '\n\nInformações importantes sobre essa pessoa: ' + linhas;
+    const p = perfilCuidador;
+    const partes = [
+      p.nome_completo        && `Nome: ${p.nome_completo}`,
+      p.idade                && `Idade: ${p.idade} anos`,
+      p.apelido              && `Apelido: ${p.apelido}`,
+      p.condicao_fisica      && `Condição física: ${p.condicao_fisica}`,
+      p.doencas              && `Doenças: ${p.doencas}`,
+      p.medicamentos         && `Medicamentos: ${p.medicamentos}`,
+      p.limitacoes_fisicas   && `Limitações físicas: ${p.limitacoes_fisicas}`,
+      p.limitacoes_cognitivas && `Limitações cognitivas: ${p.limitacoes_cognitivas}`,
+      p.rotina_diaria        && `Rotina diária: ${p.rotina_diaria}`,
+      p.nomes_filhos         && `Filhos: ${p.nomes_filhos}`,
+      p.nomes_netos          && `Netos: ${p.nomes_netos}`,
+      p.outros_familiares    && `Outros familiares: ${p.outros_familiares}`,
+      p.nome_cuidador        && `Cuidador: ${p.nome_cuidador}`,
+      p.assuntos_gosta       && `Assuntos que gosta: ${p.assuntos_gosta}`,
+      p.assuntos_evitar      && `Assuntos a evitar: ${p.assuntos_evitar}`,
+      p.comidas_favoritas    && `Comidas favoritas: ${p.comidas_favoritas}`,
+      p.programas_tv         && `Programas de TV favoritos: ${p.programas_tv}`,
+      p.musicas              && `Músicas que gosta: ${p.musicas}`,
+      p.religiao             && `Religião: ${p.religiao}`,
+      p.observacoes          && `Observações: ${p.observacoes}`,
+    ].filter(Boolean);
+
+    if (partes.length > 0) {
+      perfilTexto = '\n\nInformações importantes sobre essa pessoa:\n' + partes.join('\n');
+    }
   }
 
-  console.log('[perfil_cuidador] carregado:', !!perfilCuidador, '| com dados:', !!perfilTexto);
+  console.log('[perfil_cuidador] carregado:', !!perfilCuidador, '| campos preenchidos:', perfilTexto ? perfilTexto.split('\n').length - 2 : 0);
 
   const memoriaBruta = perfil.length > 0
     ? perfil.map(p => `${p.tipo}: ${p.valor}`).join('; ')
