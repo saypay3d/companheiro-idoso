@@ -4,12 +4,18 @@ import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL);
 
+const PROVEDORES = [
+  { tipo: 'google',     modelo: 'gemini-2.0-flash' },
+  { tipo: 'google',     modelo: 'gemini-1.5-flash' },
+  { tipo: 'openrouter', modelo: 'google/gemma-4-31b-it:free' },
+  { tipo: 'openrouter', modelo: 'deepseek/deepseek-v4-flash:free' },
+  { tipo: 'openrouter', modelo: 'qwen/qwen3-4b:free' },
+];
+
 export async function POST(req) {
   const { usuario_id, mensagem_usuario, modo_noite, puxar } = await req.json();
 
-  const keyPreview = (process.env.GOOGLE_AI_KEY || '').slice(0, 10);
   console.log('[conversas] usuario_id:', usuario_id, '| puxar:', puxar);
-  console.log('[conversas] API key preview:', keyPreview || '(VAZIA — variável não configurada!)');
 
   const [usuarioRows, historico, perfil] = await Promise.all([
     sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
@@ -64,7 +70,7 @@ export async function POST(req) {
     }
   }
 
-  console.log('[perfil_cuidador] carregado:', !!perfilCuidador, '| campos preenchidos:', perfilTexto ? perfilTexto.split('\n').length - 2 : 0);
+  console.log('[perfil_cuidador] carregado:', !!perfilCuidador);
 
   const memoriaTexto = perfil.length > 0
     ? '\n\nMemórias aprendidas sobre essa pessoa:\n' +
@@ -84,71 +90,99 @@ export async function POST(req) {
   const systemPromptFinal = systemPrompt.length > 500 ? systemPrompt.slice(0, 500) : systemPrompt;
   console.log('[conversas] system prompt chars:', systemPromptFinal.length);
 
-  const contentsHistorico = historico.reverse().flatMap(c => [
-    { role: 'user',  parts: [{ text: c.mensagem_usuario }] },
-    { role: 'model', parts: [{ text: c.mensagem_ia }] },
-  ]);
+  const historicoOrdenado = historico.reverse();
 
+  // Formato Google AI
   const contents = [
-    ...contentsHistorico,
+    ...historicoOrdenado.flatMap(c => [
+      { role: 'user',  parts: [{ text: c.mensagem_usuario }] },
+      { role: 'model', parts: [{ text: c.mensagem_ia }] },
+    ]),
     { role: 'user', parts: [{ text: puxar ? '[inicie a conversa agora espontaneamente]' : mensagem_usuario }] },
   ];
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + process.env.GOOGLE_AI_KEY;
+  // Formato OpenRouter
+  const mensagens = [
+    { role: 'system', content: systemPromptFinal },
+    ...historicoOrdenado.flatMap(c => [
+      { role: 'user',      content: c.mensagem_usuario },
+      { role: 'assistant', content: c.mensagem_ia },
+    ]),
+    { role: 'user', content: puxar ? '[inicie a conversa agora espontaneamente]' : mensagem_usuario },
+  ];
 
-  let orRes, rawText, data;
+  const erros = [];
+  let respostaFinal = null;
 
-  try {
-    orRes = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+  for (const provedor of PROVEDORES) {
+    console.log('[conversas] Tentando:', provedor.tipo, provedor.modelo);
+
+    let fetchUrl, fetchHeaders, fetchBody;
+
+    if (provedor.tipo === 'google') {
+      fetchUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + provedor.modelo + ':generateContent?key=' + process.env.GOOGLE_AI_KEY;
+      fetchHeaders = { 'Content-Type': 'application/json' };
+      fetchBody = JSON.stringify({
         systemInstruction: { parts: [{ text: systemPromptFinal }] },
         contents,
         generationConfig: { maxOutputTokens: 150 },
-      }),
-    });
-  } catch (fetchErr) {
-    console.error('[conversas] Erro de rede:', fetchErr.message);
+      });
+    } else {
+      fetchUrl = 'https://openrouter.ai/api/v1/chat/completions';
+      fetchHeaders = {
+        'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
+        'Content-Type': 'application/json',
+      };
+      fetchBody = JSON.stringify({ model: provedor.modelo, messages: mensagens, max_tokens: 150 });
+    }
+
+    let res, rawText, data;
+
+    try {
+      res = await fetch(fetchUrl, { method: 'POST', headers: fetchHeaders, body: fetchBody });
+    } catch (e) {
+      erros.push({ provedor: provedor.modelo, erro: e.message });
+      continue;
+    }
+
+    console.log('[conversas] HTTP', res.status, '|', provedor.modelo);
+
+    if (res.status === 429) {
+      erros.push({ provedor: provedor.modelo, status: 429 });
+      await new Promise(r => setTimeout(r, 3000));
+      continue;
+    }
+
+    try {
+      rawText = await res.text();
+      data = JSON.parse(rawText);
+    } catch (e) {
+      erros.push({ provedor: provedor.modelo, status: res.status, erro: e.message });
+      continue;
+    }
+
+    const conteudo = provedor.tipo === 'google'
+      ? data.candidates?.[0]?.content?.parts?.[0]?.text
+      : data.choices?.[0]?.message?.content;
+
+    if (res.ok && conteudo && conteudo.trim().length > 0) {
+      respostaFinal = conteudo.trim();
+      console.log('[conversas] Sucesso com', provedor.modelo, '| resposta:', respostaFinal);
+      break;
+    }
+
+    erros.push({ provedor: provedor.modelo, status: res.status, body: rawText?.slice(0, 200) });
+  }
+
+  if (!respostaFinal) {
+    console.error('[conversas] Todos os provedores falharam:', JSON.stringify(erros));
     return Response.json({
       resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!',
-      debug: { erro: fetchErr.message },
+      debug: { erros },
     });
   }
 
-  console.log('[conversas] HTTP', orRes.status, orRes.statusText);
-
-  try {
-    rawText = await orRes.text();
-  } catch (e) {
-    console.error('[conversas] Erro ao ler body:', e.message);
-    return Response.json({ resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!', debug: { erro: e.message } });
-  }
-
-  if (!rawText || rawText.trim() === '') {
-    console.error('[conversas] Body vazio');
-    return Response.json({ resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!', debug: { erro: 'body vazio' } });
-  }
-
-  try {
-    data = JSON.parse(rawText);
-  } catch (e) {
-    console.error('[conversas] JSON inválido:', rawText.slice(0, 400));
-    return Response.json({ resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!', debug: { erro: 'JSON inválido', body: rawText.slice(0, 400) } });
-  }
-
-  const conteudo = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!orRes.ok || !conteudo || conteudo.trim().length === 0) {
-    console.error('[conversas] Sem conteúdo válido:', rawText.slice(0, 400));
-    return Response.json({
-      resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!',
-      debug: { status: orRes.status, body: rawText.slice(0, 400) },
-    });
-  }
-
-  const mensagem_ia = conteudo.trim();
-  console.log('[conversas] Resposta IA:', mensagem_ia);
-
+  const mensagem_ia = respostaFinal;
   const mensagemSalva = puxar ? '[puxar]' : mensagem_usuario;
   await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia)
             VALUES (${usuario_id}, ${mensagemSalva}, ${mensagem_ia})`;

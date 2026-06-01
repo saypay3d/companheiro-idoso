@@ -1,23 +1,58 @@
-export async function GET() {
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + process.env.GOOGLE_AI_KEY;
+const PROVEDORES = [
+  { tipo: 'google',     modelo: 'gemini-2.0-flash' },
+  { tipo: 'google',     modelo: 'gemini-1.5-flash' },
+  { tipo: 'openrouter', modelo: 'google/gemma-4-31b-it:free' },
+  { tipo: 'openrouter', modelo: 'deepseek/deepseek-v4-flash:free' },
+  { tipo: 'openrouter', modelo: 'qwen/qwen3-4b:free' },
+];
 
-  let status, rawText, parsed;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+export async function GET() {
+  const resultados = [];
+
+  for (const provedor of PROVEDORES) {
+    let fetchUrl, fetchHeaders, fetchBody;
+
+    if (provedor.tipo === 'google') {
+      fetchUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + provedor.modelo + ':generateContent?key=' + process.env.GOOGLE_AI_KEY;
+      fetchHeaders = { 'Content-Type': 'application/json' };
+      fetchBody = JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: 'oi' }] }],
         generationConfig: { maxOutputTokens: 20 },
-      }),
-    });
-    status = res.status;
-    rawText = await res.text();
-    try { parsed = JSON.parse(rawText); } catch { parsed = null; }
-  } catch (err) {
-    return Response.json({ sucesso: false, erro: err.message });
+      });
+    } else {
+      fetchUrl = 'https://openrouter.ai/api/v1/chat/completions';
+      fetchHeaders = {
+        'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
+        'Content-Type': 'application/json',
+      };
+      fetchBody = JSON.stringify({
+        model: provedor.modelo,
+        messages: [{ role: 'user', content: 'oi' }],
+        max_tokens: 20,
+      });
+    }
+
+    let status, rawText, parsed;
+    try {
+      const res = await fetch(fetchUrl, { method: 'POST', headers: fetchHeaders, body: fetchBody });
+      status = res.status;
+      rawText = await res.text();
+      try { parsed = JSON.parse(rawText); } catch { parsed = null; }
+    } catch (err) {
+      resultados.push({ tipo: provedor.tipo, modelo: provedor.modelo, status: 'network_error', erro: err.message });
+      continue;
+    }
+
+    const conteudo = provedor.tipo === 'google'
+      ? parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? null
+      : parsed?.choices?.[0]?.message?.content ?? null;
+
+    resultados.push({ tipo: provedor.tipo, modelo: provedor.modelo, status, resposta: conteudo, body: parsed ?? rawText });
+
+    if (status === 200 && conteudo) {
+      return Response.json({ sucesso: provedor.modelo, resultados });
+    }
   }
 
-  const conteudo = parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-  return Response.json({ sucesso: status === 200 && !!conteudo, status, resposta: conteudo, body: parsed ?? rawText });
+  return Response.json({ sucesso: null, resultados });
 }
