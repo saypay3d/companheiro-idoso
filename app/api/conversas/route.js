@@ -4,25 +4,13 @@ import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL);
 
-const MODELOS = [
-  'google/gemma-4-31b-it:free',
-  'deepseek/deepseek-v4-flash:free',
-  'minimax/minimax-m2.5:free',
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'meta-llama/llama-4-maverick:free',
-  'qwen/qwen3-4b:free',
-];
-
-
 export async function POST(req) {
   const { usuario_id, mensagem_usuario, modo_noite, puxar } = await req.json();
 
-  // Log dos primeiros 10 caracteres da chave para confirmar que está presente
-  const keyPreview = (process.env.OPENROUTER_API_KEY || '').slice(0, 10);
+  const keyPreview = (process.env.GOOGLE_AI_KEY || '').slice(0, 10);
   console.log('[conversas] usuario_id:', usuario_id, '| puxar:', puxar);
   console.log('[conversas] API key preview:', keyPreview || '(VAZIA — variável não configurada!)');
 
-  // Busca dados do banco — perfil_completo com fallback caso a tabela não exista
   const [usuarioRows, historico, perfil] = await Promise.all([
     sql`SELECT nome FROM usuarios WHERE id = ${usuario_id}`,
     sql`SELECT mensagem_usuario, mensagem_ia FROM conversas
@@ -47,26 +35,26 @@ export async function POST(req) {
   if (perfilCuidador) {
     const p = perfilCuidador;
     const partes = [
-      p.nome_completo        && `Nome: ${p.nome_completo}`,
-      p.idade                && `Idade: ${p.idade} anos`,
-      p.apelido              && `Apelido: ${p.apelido}`,
-      p.condicao_fisica      && `Condição física: ${p.condicao_fisica}`,
-      p.doencas              && `Doenças: ${p.doencas}`,
-      p.medicamentos         && `Medicamentos: ${p.medicamentos}`,
-      p.limitacoes_fisicas   && `Limitações físicas: ${p.limitacoes_fisicas}`,
+      p.nome_completo         && `Nome: ${p.nome_completo}`,
+      p.idade                 && `Idade: ${p.idade} anos`,
+      p.apelido               && `Apelido: ${p.apelido}`,
+      p.condicao_fisica       && `Condição física: ${p.condicao_fisica}`,
+      p.doencas               && `Doenças: ${p.doencas}`,
+      p.medicamentos          && `Medicamentos: ${p.medicamentos}`,
+      p.limitacoes_fisicas    && `Limitações físicas: ${p.limitacoes_fisicas}`,
       p.limitacoes_cognitivas && `Limitações cognitivas: ${p.limitacoes_cognitivas}`,
-      p.rotina_diaria        && `Rotina diária: ${p.rotina_diaria}`,
-      p.nomes_filhos         && `Filhos: ${p.nomes_filhos}`,
-      p.nomes_netos          && `Netos: ${p.nomes_netos}`,
-      p.outros_familiares    && `Outros familiares: ${p.outros_familiares}`,
-      p.nome_cuidador        && `Cuidador: ${p.nome_cuidador}`,
-      p.assuntos_gosta       && `Assuntos que gosta: ${p.assuntos_gosta}`,
-      p.assuntos_evitar      && `Assuntos a evitar: ${p.assuntos_evitar}`,
-      p.comidas_favoritas    && `Comidas favoritas: ${p.comidas_favoritas}`,
-      p.programas_tv         && `Programas de TV favoritos: ${p.programas_tv}`,
-      p.musicas              && `Músicas que gosta: ${p.musicas}`,
-      p.religiao             && `Religião: ${p.religiao}`,
-      p.observacoes          && `Observações: ${p.observacoes}`,
+      p.rotina_diaria         && `Rotina diária: ${p.rotina_diaria}`,
+      p.nomes_filhos          && `Filhos: ${p.nomes_filhos}`,
+      p.nomes_netos           && `Netos: ${p.nomes_netos}`,
+      p.outros_familiares     && `Outros familiares: ${p.outros_familiares}`,
+      p.nome_cuidador         && `Cuidador: ${p.nome_cuidador}`,
+      p.assuntos_gosta        && `Assuntos que gosta: ${p.assuntos_gosta}`,
+      p.assuntos_evitar       && `Assuntos a evitar: ${p.assuntos_evitar}`,
+      p.comidas_favoritas     && `Comidas favoritas: ${p.comidas_favoritas}`,
+      p.programas_tv          && `Programas de TV favoritos: ${p.programas_tv}`,
+      p.musicas               && `Músicas que gosta: ${p.musicas}`,
+      p.religiao              && `Religião: ${p.religiao}`,
+      p.observacoes           && `Observações: ${p.observacoes}`,
     ].filter(Boolean);
 
     if (partes.length > 0) {
@@ -96,133 +84,69 @@ export async function POST(req) {
   const systemPromptFinal = systemPrompt.length > 500 ? systemPrompt.slice(0, 500) : systemPrompt;
   console.log('[conversas] system prompt chars:', systemPromptFinal.length);
 
-  const mensagensHistorico = historico.reverse().flatMap(c => [
-    { role: 'user',      content: c.mensagem_usuario },
-    { role: 'assistant', content: c.mensagem_ia },
+  const contentsHistorico = historico.reverse().flatMap(c => [
+    { role: 'user',  parts: [{ text: c.mensagem_usuario }] },
+    { role: 'model', parts: [{ text: c.mensagem_ia }] },
   ]);
 
-  const mensagens = [
-    { role: 'system', content: systemPromptFinal },
-    ...mensagensHistorico,
-    { role: 'user', content: puxar ? '[inicie a conversa agora espontaneamente]' : mensagem_usuario },
+  const contents = [
+    ...contentsHistorico,
+    { role: 'user', parts: [{ text: puxar ? '[inicie a conversa agora espontaneamente]' : mensagem_usuario }] },
   ];
 
-  const erros = [];
-  let orData = null;
-  let modeloUsado = null;
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_AI_KEY}`;
 
-  for (const modelo of MODELOS) {
-    console.log('[conversas] Tentando modelo:', modelo);
+  let orRes, rawText, data;
 
-    let orRes, rawText, data;
-
-    // 1. Fetch
-    try {
-      orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ model: modelo, messages: mensagens, max_tokens: 150 }),
-      });
-    } catch (fetchErr) {
-      const detalhe = { modelo, status: 'network_error', erro: fetchErr.message };
-      console.error('[conversas] Erro de rede com', modelo, detalhe);
-      erros.push(detalhe);
-      continue;
-    }
-
-    console.log('[conversas] HTTP', orRes.status, orRes.statusText, '| modelo:', modelo);
-
-    // 2. Lê o body como texto primeiro
-    try {
-      rawText = await orRes.text();
-    } catch (textErr) {
-      const detalhe = { modelo, status: orRes.status, erro: 'falha ao ler body: ' + textErr.message };
-      console.error('[conversas]', detalhe);
-      erros.push(detalhe);
-      continue;
-    }
-
-    // 3. Verifica se veio algo
-    if (!rawText || rawText.trim() === '') {
-      const detalhe = { modelo, status: orRes.status, erro: 'body vazio' };
-      console.error('[conversas] Body vazio com', modelo, '| HTTP', orRes.status);
-      erros.push(detalhe);
-      continue;
-    }
-
-    // 4. Parse JSON
-    try {
-      data = JSON.parse(rawText);
-    } catch (parseErr) {
-      const detalhe = { modelo, status: orRes.status, erro: 'JSON inválido: ' + parseErr.message, body: rawText.slice(0, 400) };
-      console.error('[conversas] JSON inválido com', modelo, detalhe);
-      erros.push(detalhe);
-      continue;
-    }
-
-    // 5. Verifica se a resposta tem conteúdo
-    const conteudo = data.choices?.[0]?.message?.content;
-    if (orRes.ok && conteudo && conteudo.trim().length > 0) {
-      orData = data;
-      modeloUsado = modelo;
-      console.log('[conversas] Sucesso com', modeloUsado, '| resposta:', conteudo.trim());
-      break;
-    }
-
-    const detalhe = {
-      modelo,
-      status: orRes.status,
-      erro: data.error?.message ?? data.error?.code ?? '(sem campo error)',
-      choices0: JSON.stringify(data.choices?.[0] ?? null),
-      body: rawText.slice(0, 400),
-    };
-    console.error('[conversas] Sem conteúdo válido com', modelo, JSON.stringify(detalhe));
-    erros.push(detalhe);
-  }
-
-  if (!orData) {
-    const todos429 = erros.length === MODELOS.length && erros.every(e => e.status === 429);
-    if (todos429) {
-      console.log('[conversas] Todos deram 429 — aguardando 3s e tentando novamente...');
-      await new Promise(r => setTimeout(r, 3000));
-      const modelo = MODELOS[0];
-      try {
-        const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ model: modelo, messages: mensagens, max_tokens: 150 }),
-        });
-        const rawText = await orRes.text();
-        if (rawText && rawText.trim()) {
-          const data = JSON.parse(rawText);
-          const conteudo = data.choices?.[0]?.message?.content;
-          if (orRes.ok && conteudo && conteudo.trim().length > 0) {
-            orData = data;
-            modeloUsado = modelo;
-            console.log('[conversas] Retry bem-sucedido com', modelo);
-          }
-        }
-      } catch (e) {
-        console.error('[conversas] Retry falhou:', e.message);
-      }
-    }
-  }
-
-  if (!orData) {
-    console.error('[conversas] Todos os modelos falharam:', JSON.stringify(erros));
+  try {
+    orRes = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPromptFinal }] },
+        contents,
+        generationConfig: { maxOutputTokens: 150 },
+      }),
+    });
+  } catch (fetchErr) {
+    console.error('[conversas] Erro de rede:', fetchErr.message);
     return Response.json({
       resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!',
-      debug: { erros },
+      debug: { erro: fetchErr.message },
     });
   }
 
-  const mensagem_ia = orData.choices[0].message.content.trim();
+  console.log('[conversas] HTTP', orRes.status, orRes.statusText);
+
+  try {
+    rawText = await orRes.text();
+  } catch (e) {
+    console.error('[conversas] Erro ao ler body:', e.message);
+    return Response.json({ resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!', debug: { erro: e.message } });
+  }
+
+  if (!rawText || rawText.trim() === '') {
+    console.error('[conversas] Body vazio');
+    return Response.json({ resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!', debug: { erro: 'body vazio' } });
+  }
+
+  try {
+    data = JSON.parse(rawText);
+  } catch (e) {
+    console.error('[conversas] JSON inválido:', rawText.slice(0, 400));
+    return Response.json({ resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!', debug: { erro: 'JSON inválido', body: rawText.slice(0, 400) } });
+  }
+
+  const conteudo = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!orRes.ok || !conteudo || conteudo.trim().length === 0) {
+    console.error('[conversas] Sem conteúdo válido:', rawText.slice(0, 400));
+    return Response.json({
+      resposta: puxar ? null : 'Tive um probleminha para responder. Tente de novo!',
+      debug: { status: orRes.status, body: rawText.slice(0, 400) },
+    });
+  }
+
+  const mensagem_ia = conteudo.trim();
   console.log('[conversas] Resposta IA:', mensagem_ia);
 
   const mensagemSalva = puxar ? '[puxar]' : mensagem_usuario;
@@ -245,20 +169,16 @@ Responda APENAS com o JSON válido, sem texto adicional, sem markdown.
 
 Mensagem: "${mensagem_usuario}"`;
 
-    fetch('https://openrouter.ai/api/v1/chat/completions', {
+    fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_AI_KEY}`, {
       method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'openrouter/auto',
-        messages: [{ role: 'user', content: promptExtracao }],
+        contents: [{ role: 'user', parts: [{ text: promptExtracao }] }],
       }),
     })
       .then(r => r.json())
       .then(async extractData => {
-        const raw = extractData.choices?.[0]?.message?.content ?? '';
+        const raw = extractData.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
         console.log('[memoria] resposta bruta:', raw);
         const jsonStr = raw.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
         const parsed = JSON.parse(jsonStr);
