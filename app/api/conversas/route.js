@@ -7,14 +7,10 @@ const sql = neon(process.env.DATABASE_URL);
 const MODELOS = [
   'google/gemma-4-31b-it:free',
   'deepseek/deepseek-v4-flash:free',
-  'nousresearch/hermes-3-llama-3.1-405b:free',
-  'mistralai/mistral-7b-instruct:free',
-  'meta-llama/llama-3.1-8b-instruct:free',
-  'meta-llama/llama-3.2-3b-instruct:free',
-  'qwen/qwen-2-7b-instruct:free',
-  'microsoft/phi-3-mini-128k-instruct:free',
-  'google/gemma-2-9b-it:free',
-  'openchat/openchat-7b:free',
+  'minimax/minimax-m2.5:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'meta-llama/llama-4-maverick:free',
+  'qwen/qwen3-4b:free',
 ];
 
 
@@ -185,6 +181,37 @@ export async function POST(req) {
     };
     console.error('[conversas] Sem conteúdo válido com', modelo, JSON.stringify(detalhe));
     erros.push(detalhe);
+  }
+
+  if (!orData) {
+    const todos429 = erros.length === MODELOS.length && erros.every(e => e.status === 429);
+    if (todos429) {
+      console.log('[conversas] Todos deram 429 — aguardando 3s e tentando novamente...');
+      await new Promise(r => setTimeout(r, 3000));
+      const modelo = MODELOS[0];
+      try {
+        const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ model: modelo, messages: mensagens, max_tokens: 150 }),
+        });
+        const rawText = await orRes.text();
+        if (rawText && rawText.trim()) {
+          const data = JSON.parse(rawText);
+          const conteudo = data.choices?.[0]?.message?.content;
+          if (orRes.ok && conteudo && conteudo.trim().length > 0) {
+            orData = data;
+            modeloUsado = modelo;
+            console.log('[conversas] Retry bem-sucedido com', modelo);
+          }
+        }
+      } catch (e) {
+        console.error('[conversas] Retry falhou:', e.message);
+      }
+    }
   }
 
   if (!orData) {
