@@ -5,9 +5,8 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 const PROVEDORES = [
-  { tipo: 'google',     modelo: 'gemini-2.0-flash' },
-  { tipo: 'google',     modelo: 'gemini-1.5-flash' },
   { tipo: 'openrouter', modelo: 'google/gemma-4-31b-it:free' },
+  { tipo: 'google',     modelo: 'gemini-2.0-flash' },
   { tipo: 'openrouter', modelo: 'deepseek/deepseek-v4-flash:free' },
   { tipo: 'openrouter', modelo: 'qwen/qwen3-4b:free' },
 ];
@@ -87,7 +86,7 @@ export async function POST(req) {
     ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
     : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
 
-  const systemPromptFinal = systemPrompt.length > 500 ? systemPrompt.slice(0, 500) : systemPrompt;
+  const systemPromptFinal = systemPrompt.length > 400 ? systemPrompt.slice(0, 400) : systemPrompt;
   console.log('[conversas] system prompt chars:', systemPromptFinal.length);
 
   const historicoOrdenado = historico.reverse();
@@ -141,14 +140,14 @@ export async function POST(req) {
     try {
       res = await fetch(fetchUrl, { method: 'POST', headers: fetchHeaders, body: fetchBody });
     } catch (e) {
-      erros.push({ provedor: provedor.modelo, erro: e.message });
+      erros.push({ modelo: provedor.modelo, tipo: provedor.tipo, erro: e.message });
       continue;
     }
 
     console.log('[conversas] HTTP', res.status, '|', provedor.modelo);
 
     if (res.status === 429) {
-      erros.push({ provedor: provedor.modelo, status: 429 });
+      erros.push({ modelo: provedor.modelo, tipo: provedor.tipo, status: 429 });
       await new Promise(r => setTimeout(r, 3000));
       continue;
     }
@@ -157,7 +156,7 @@ export async function POST(req) {
       rawText = await res.text();
       data = JSON.parse(rawText);
     } catch (e) {
-      erros.push({ provedor: provedor.modelo, status: res.status, erro: e.message });
+      erros.push({ modelo: provedor.modelo, tipo: provedor.tipo, status: res.status, erro: e.message });
       continue;
     }
 
@@ -171,7 +170,7 @@ export async function POST(req) {
       break;
     }
 
-    erros.push({ provedor: provedor.modelo, status: res.status, body: rawText?.slice(0, 200) });
+    erros.push({ modelo: provedor.modelo, tipo: provedor.tipo, status: res.status, body: rawText?.slice(0, 200) });
   }
 
   if (!respostaFinal) {

@@ -1,7 +1,6 @@
 const PROVEDORES = [
-  { tipo: 'google',     modelo: 'gemini-2.0-flash' },
-  { tipo: 'google',     modelo: 'gemini-1.5-flash' },
   { tipo: 'openrouter', modelo: 'google/gemma-4-31b-it:free' },
+  { tipo: 'google',     modelo: 'gemini-2.0-flash' },
   { tipo: 'openrouter', modelo: 'deepseek/deepseek-v4-flash:free' },
   { tipo: 'openrouter', modelo: 'qwen/qwen3-4b:free' },
 ];
