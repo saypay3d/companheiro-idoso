@@ -94,12 +94,12 @@ export async function POST(req) {
     { role: 'user', parts: [{ text: puxar ? '[inicie a conversa agora espontaneamente]' : mensagem_usuario }] },
   ];
 
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_AI_KEY}`;
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + process.env.GOOGLE_AI_KEY;
 
   let orRes, rawText, data;
 
   try {
-    orRes = await fetch(apiUrl, {
+    orRes = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -169,7 +169,7 @@ Responda APENAS com o JSON válido, sem texto adicional, sem markdown.
 
 Mensagem: "${mensagem_usuario}"`;
 
-    fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_AI_KEY}`, {
+    fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + process.env.GOOGLE_AI_KEY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

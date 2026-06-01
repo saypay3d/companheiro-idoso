@@ -1,46 +1,23 @@
-const MODELOS = [
-  'google/gemma-4-31b-it:free',
-  'deepseek/deepseek-v4-flash:free',
-  'minimax/minimax-m2.5:free',
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'meta-llama/llama-4-maverick:free',
-  'qwen/qwen3-4b:free',
-];
-
 export async function GET() {
-  const url = 'https://openrouter.ai/api/v1/chat/completions';
-  const resultados = [];
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + process.env.GOOGLE_AI_KEY;
 
-  for (const modelo of MODELOS) {
-    let status, rawText, parsed;
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: modelo,
-          messages: [{ role: 'user', content: 'oi' }],
-          max_tokens: 20,
-        }),
-      });
-      status = res.status;
-      rawText = await res.text();
-      try { parsed = JSON.parse(rawText); } catch { parsed = null; }
-    } catch (err) {
-      resultados.push({ modelo, status: 'network_error', erro: err.message });
-      continue;
-    }
-
-    const conteudo = parsed?.choices?.[0]?.message?.content;
-    resultados.push({ modelo, status, resposta: conteudo ?? null, body: parsed ?? rawText });
-
-    if (status === 200 && conteudo) {
-      return Response.json({ sucesso: modelo, resultados });
-    }
+  let status, rawText, parsed;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: 'oi' }] }],
+        generationConfig: { maxOutputTokens: 20 },
+      }),
+    });
+    status = res.status;
+    rawText = await res.text();
+    try { parsed = JSON.parse(rawText); } catch { parsed = null; }
+  } catch (err) {
+    return Response.json({ sucesso: false, erro: err.message });
   }
 
-  return Response.json({ sucesso: null, resultados });
+  const conteudo = parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+  return Response.json({ sucesso: status === 200 && !!conteudo, status, resposta: conteudo, body: parsed ?? rawText });
 }
