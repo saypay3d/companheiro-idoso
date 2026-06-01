@@ -1,4 +1,5 @@
 const PROVEDORES = [
+  { tipo: 'openrouter', modelo: 'deepseek/deepseek-v4-flash' },
   { tipo: 'openrouter', modelo: 'google/gemma-4-31b-it:free' },
   { tipo: 'google',     modelo: 'gemini-2.0-flash' },
   { tipo: 'openrouter', modelo: 'deepseek/deepseek-v4-flash:free' },
