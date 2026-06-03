@@ -47,6 +47,7 @@ export default function Perfil() {
   const [salvo,     setSalvo]     = useState(false);
 
   const [form, setForm] = useState({
+    genero: '',
     nome_completo: '', idade: '', apelido: '',
     condicao_fisica: 'Caminha sozinho',
     doencas: '', medicamentos: '',
@@ -69,6 +70,7 @@ export default function Perfil() {
       .then(r => r.json())
       .then(data => {
         setForm({
+          genero:                data.genero                ?? '',
           nome_completo:         data.nome_completo         ?? '',
           idade:                 data.idade                 ?? '',
           apelido:               data.apelido               ?? '',
@@ -146,6 +148,26 @@ export default function Perfil() {
 
         {/* ── IDENTIFICAÇÃO ── */}
         <h2 style={estiloSecao}>IDENTIFICAÇÃO</h2>
+
+        <Campo label="Gênero">
+          <div style={{ display: 'flex', gap: '14px' }}>
+            {['Homem', 'Mulher'].map(op => {
+              const sel = form.genero === op;
+              return (
+                <button key={op} onClick={() => setF('genero', op)} style={{
+                  flex: 1, fontSize: '24px', padding: '20px',
+                  borderRadius: '12px',
+                  border: `2px solid ${sel ? '#0070f3' : '#2a2a2a'}`,
+                  backgroundColor: sel ? '#061424' : '#1a1a1a',
+                  color: sel ? '#fff' : '#888',
+                  cursor: 'pointer', fontWeight: sel ? 700 : 400, transition: 'all .15s',
+                }}>
+                  {op}
+                </button>
+              );
+            })}
+          </div>
+        </Campo>
 
         <Campo label="Nome completo">
           <input type="text" value={form.nome_completo} onChange={e => setF('nome_completo', e.target.value)}

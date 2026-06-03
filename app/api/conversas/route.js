@@ -70,6 +70,11 @@ export async function POST(req) {
 
   console.log('[perfil_cuidador] carregado:', !!perfilCuidador);
 
+  const genero     = perfilCuidador?.genero;
+  const tratamento = genero === 'Homem' ? 'senhor'    : 'senhora';
+  const descricao  = genero === 'Homem' ? 'um senhor' : 'uma senhora';
+  const chamadoA   = genero === 'Homem' ? 'chamado'   : 'chamada';
+
   const memoriaTexto = perfil.length > 0
     ? '\n\nMemórias aprendidas sobre essa pessoa:\n' +
       perfil.map(p => `${p.tipo}: ${p.valor}`).join('\n')
@@ -81,10 +86,10 @@ export async function POST(req) {
   const instrucaoMemoria = `REGRA ABSOLUTA: NUNCA INVENTE INFORMAÇÕES SOBRE O USUÁRIO. NUNCA DIGA QUE ALGO ACONTECEU SE NÃO FOI DITO. SE NÃO SABE ALGO PERGUNTE EM VEZ DE INVENTAR. USE SOMENTE INFORMAÇÕES DO PERFIL E DAS MEMÓRIAS ABAIXO. SE O USUÁRIO MENCIONAR ANIMAIS DE ESTIMAÇÃO, NOMES DE PESSOAS, DATAS OU QUALQUER DADO PESSOAL, SEMPRE SALVE NA MEMÓRIA.`;
 
   const systemPrompt = puxar
-    ? `${instrucaoMemoria}\n\nVocê é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Faça uma fala espontânea e natural para iniciar conversa. Responda em no máximo 15 palavras. Português brasileiro informal. Varie sempre.${perfilTexto}${memoriaTexto}`
+    ? `${instrucaoMemoria}\n\nVocê é um companheiro virtual atencioso de ${nome}, ${descricao} de 91 anos. Trate-o(a) como ${tratamento}. Use os pronomes corretos: ${genero === 'Homem' ? 'ele, dele, para ele' : 'ela, dela, para ela'}. Faça uma fala espontânea e natural para iniciar conversa. Responda em no máximo 15 palavras. Português brasileiro informal. Varie sempre.${perfilTexto}${memoriaTexto}`
     : modo_noite
-    ? `${instrucaoMemoria}\n\nVocê é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
-    : `${instrucaoMemoria}\n\nVocê é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
+    ? `${instrucaoMemoria}\n\nVocê é um companheiro virtual carinhoso de ${nome}, ${descricao} de 91 anos. Trate-o(a) como ${tratamento}. Use os pronomes corretos: ${genero === 'Homem' ? 'ele, dele, para ele' : 'ela, dela, para ela'}. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
+    : `${instrucaoMemoria}\n\nVocê é um companheiro virtual de ${descricao} de 91 anos ${chamadoA} ${nome}. Trate-o(a) como ${tratamento}. Use os pronomes corretos: ${genero === 'Homem' ? 'ele, dele, para ele' : 'ela, dela, para ela'}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
 
   console.log('[conversas] system prompt completo:\n' + systemPrompt);
 

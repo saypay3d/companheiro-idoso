@@ -3,6 +3,7 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 export async function GET(req) {
+  await sql`ALTER TABLE perfil_cuidador ADD COLUMN IF NOT EXISTS genero VARCHAR(20)`.catch(() => {});
   const { searchParams } = new URL(req.url);
   const usuario_id = searchParams.get('usuario_id');
   const rows = await sql`SELECT * FROM perfil_cuidador WHERE usuario_id = ${usuario_id}`;
@@ -12,7 +13,8 @@ export async function GET(req) {
 export async function POST(req) {
   const body = await req.json();
   const {
-    usuario_id, nome_completo, idade, apelido, condicao_fisica,
+    usuario_id, genero,
+    nome_completo, idade, apelido, condicao_fisica,
     doencas, medicamentos, limitacoes_fisicas, limitacoes_cognitivas, rotina_diaria,
     nomes_filhos, nomes_netos, outros_familiares, nome_cuidador,
     assuntos_gosta, assuntos_evitar, comidas_favoritas,
@@ -21,19 +23,22 @@ export async function POST(req) {
 
   await sql`
     INSERT INTO perfil_cuidador (
-      usuario_id, nome_completo, idade, apelido, condicao_fisica,
+      usuario_id, genero,
+      nome_completo, idade, apelido, condicao_fisica,
       doencas, medicamentos, limitacoes_fisicas, limitacoes_cognitivas, rotina_diaria,
       nomes_filhos, nomes_netos, outros_familiares, nome_cuidador,
       assuntos_gosta, assuntos_evitar, comidas_favoritas,
       programas_tv, musicas, religiao, observacoes, atualizado_em
     ) VALUES (
-      ${usuario_id}, ${nome_completo}, ${idade || null}, ${apelido}, ${condicao_fisica},
+      ${usuario_id}, ${genero || null},
+      ${nome_completo}, ${idade || null}, ${apelido}, ${condicao_fisica},
       ${doencas}, ${medicamentos}, ${limitacoes_fisicas}, ${limitacoes_cognitivas}, ${rotina_diaria},
       ${nomes_filhos}, ${nomes_netos}, ${outros_familiares}, ${nome_cuidador},
       ${assuntos_gosta}, ${assuntos_evitar}, ${comidas_favoritas},
       ${programas_tv}, ${musicas}, ${religiao}, ${observacoes}, NOW()
     )
     ON CONFLICT (usuario_id) DO UPDATE SET
+      genero                = EXCLUDED.genero,
       nome_completo         = EXCLUDED.nome_completo,
       idade                 = EXCLUDED.idade,
       apelido               = EXCLUDED.apelido,
