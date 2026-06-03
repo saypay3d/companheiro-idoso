@@ -23,12 +23,20 @@ export async function POST(req) {
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
+  const id         = searchParams.get('id');
   const usuario_id = searchParams.get('usuario_id');
+
+  if (id) {
+    const rows = await sql`
+      SELECT id, video, respondido, solicitado_em
+      FROM observacoes WHERE id = ${id} LIMIT 1`;
+    return Response.json(rows[0] ?? null);
+  }
+
   const rows = await sql`
     SELECT id FROM observacoes
     WHERE usuario_id = ${usuario_id} AND respondido = false
-    ORDER BY solicitado_em DESC
-    LIMIT 1`;
+    ORDER BY solicitado_em DESC LIMIT 1`;
   return Response.json(rows[0] ?? null);
 }
 
