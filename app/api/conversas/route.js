@@ -78,12 +78,13 @@ export async function POST(req) {
   console.log('[memoria] itens:', perfil.length);
 
   const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem. Responda em no máximo 15 palavras de forma direta e natural.';
+  const instrucaoMemoria = ' NUNCA invente informações. Use SOMENTE o que está no seu contexto. Se não sabe, diga que não lembra.';
 
   const systemPrompt = puxar
-    ? `Você é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Faça uma fala espontânea e natural para iniciar conversa. Responda em no máximo 15 palavras. Português brasileiro informal. Varie sempre.${perfilTexto}${memoriaTexto}`
+    ? `Você é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Faça uma fala espontânea e natural para iniciar conversa. Responda em no máximo 15 palavras. Português brasileiro informal. Varie sempre.${perfilTexto}${memoriaTexto}${instrucaoMemoria}`
     : modo_noite
-    ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
-    : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
+    ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}${instrucaoMemoria}`
+    : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}${instrucaoMemoria}`;
 
   console.log('[conversas] system prompt completo:\n' + systemPrompt);
 
@@ -184,7 +185,7 @@ export async function POST(req) {
   await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia)
             VALUES (${usuario_id}, ${mensagemSalva}, ${mensagem_ia})`;
 
-  // Extração de memória — fire-and-forget
+  // Extração de memória — aguardada para garantir salvamento antes de retornar
   if (!puxar && mensagem_usuario) {
     const promptExtracao = `Você é um extrator de informações pessoais. Analise a mensagem abaixo e extraia dados relevantes sobre a pessoa que falou.
 
@@ -200,23 +201,22 @@ Responda APENAS com o JSON válido, sem texto adicional, sem markdown.
 
 Mensagem: "${mensagem_usuario}"`;
 
-    fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + process.env.GOOGLE_AI_KEY, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: promptExtracao }] }],
-      }),
-    })
-      .then(r => r.json())
-      .then(async extractData => {
-        const raw = extractData.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-        console.log('[memoria] resposta bruta:', raw);
-        const jsonStr = raw.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(jsonStr);
-        if (!Array.isArray(parsed.dados) || parsed.dados.length === 0) {
-          console.log('[memoria] nada relevante extraído');
-          return;
-        }
+    try {
+      const extractRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + process.env.GOOGLE_AI_KEY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: promptExtracao }] }],
+        }),
+      });
+      const extractData = await extractRes.json();
+      const raw = extractData.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      console.log('[memoria] resposta bruta:', raw);
+      const jsonStr = raw.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(jsonStr);
+      if (!Array.isArray(parsed.dados) || parsed.dados.length === 0) {
+        console.log('[memoria] nada relevante extraído');
+      } else {
         for (const item of parsed.dados) {
           if (!item.tipo || !item.valor) continue;
           const tipo  = String(item.tipo).slice(0, 100);
@@ -232,8 +232,10 @@ Mensagem: "${mensagem_usuario}"`;
             console.log('[memoria] já existe, ignorando:', tipo, '->', valor);
           }
         }
-      })
-      .catch(e => console.error('[memoria] erro na extração:', e.message));
+      }
+    } catch (e) {
+      console.error('[memoria] erro na extração:', e.message);
+    }
   }
 
   return Response.json({ resposta: mensagem_ia });
