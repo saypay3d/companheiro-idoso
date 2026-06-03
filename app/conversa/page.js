@@ -366,11 +366,29 @@ export default function Conversa() {
         if (!obs) return;
 
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+          video: { facingMode: 'user', width: { ideal: 160 }, height: { ideal: 120 } },
           audio: false,
         });
 
-        const recorder = new MediaRecorder(stream);
+        // Captura frame antecipado como fallback para video grande
+        let frameJpeg = null;
+        try {
+          const videoEl = document.createElement('video');
+          videoEl.srcObject = stream;
+          videoEl.muted = true;
+          videoEl.playsInline = true;
+          await videoEl.play();
+          await new Promise(r => setTimeout(r, 600));
+          const canvas = document.createElement('canvas');
+          canvas.width = 160; canvas.height = 120;
+          canvas.getContext('2d').drawImage(videoEl, 0, 0, 160, 120);
+          frameJpeg = canvas.toDataURL('image/jpeg', 0.8);
+          videoEl.srcObject = null;
+        } catch (e) {
+          console.warn('[observacao] frame fallback falhou:', e.message);
+        }
+
+        const recorder = new MediaRecorder(stream, { videoBitsPerSecond: 100000 });
         const chunks = [];
         recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
         recorder.onstop = () => {
@@ -379,10 +397,14 @@ export default function Conversa() {
           const reader = new FileReader();
           reader.onloadend = async () => {
             try {
+              const dados = reader.result;
+              const LIMITE = 4 * 1024 * 1024; // 4MB
+              const payload = dados.length > LIMITE && frameJpeg ? frameJpeg : dados;
+              console.log('[observacao] tamanho:', Math.round(dados.length / 1024), 'KB | usando:', dados.length > LIMITE ? 'frame JPEG' : 'video');
               await fetch('/api/observacao', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: obs.id, video: reader.result }),
+                body: JSON.stringify({ id: obs.id, video: payload }),
               });
               console.log('[observacao] gravacao enviada, id:', obs.id);
             } catch (e) {
