@@ -19,7 +19,10 @@ export default function Conversa() {
     const h = new Date().getHours();
     return h >= 21 || h < 7;
   });
-  const [silenciado,  setSilenciado]  = useState(false);
+  const [silenciado,       setSilenciado]       = useState(false);
+  const [cameraPermitida,  setCameraPermitida]  = useState(false);
+  const [solicitandoCam,   setSolicitandoCam]   = useState(false);
+  const [erroCam,          setErroCam]          = useState('');
   const router = useRouter();
 
   // Wake Lock — mantém a tela sempre ligada
@@ -433,6 +436,27 @@ export default function Conversa() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Permissão de câmera — verificar localStorage na montagem
+  useEffect(() => {
+    if (localStorage.getItem('cameraPermitida') === 'true') setCameraPermitida(true);
+  }, []);
+
+  async function pedirPermissaoCamera() {
+    setSolicitandoCam(true);
+    setErroCam('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach(t => t.stop());
+      localStorage.setItem('cameraPermitida', 'true');
+      setCameraPermitida(true);
+    } catch (e) {
+      console.warn('[camera] permissão negada:', e.message);
+      setErroCam('Câmera negada. A observação silenciosa não funcionará.');
+    } finally {
+      setSolicitandoCam(false);
+    }
+  }
+
   // Overlay noturno — verifica a hora a cada minuto
   useEffect(() => {
     function verificar() {
@@ -577,6 +601,37 @@ export default function Conversa() {
           </svg>
         )}
       </button>
+
+      {/* Overlay permissão de câmera */}
+      {!cameraPermitida && (
+        <div style={{ position:'fixed', inset:0, zIndex:200, backgroundColor:'rgba(0,0,0,0.92)', display:'flex', alignItems:'center', justifyContent:'center', padding:'24px' }}>
+          <div style={{ backgroundColor:'#1e1e1e', borderRadius:'20px', padding:'36px 28px', maxWidth:'360px', width:'100%', textAlign:'center' }}>
+            <p style={{ fontSize:'52px', margin:'0 0 16px' }}>📷</p>
+            <h2 style={{ fontSize:'22px', color:'#eee', fontWeight:600, margin:'0 0 14px' }}>Acesso à câmera</h2>
+            <p style={{ fontSize:'18px', color:'#aaa', lineHeight:1.6, margin:'0 0 28px' }}>
+              Para sua segurança, precisamos acessar a câmera. Clique em <strong style={{ color:'#eee' }}>Permitir</strong> quando o navegador solicitar.
+            </p>
+            {erroCam && (
+              <>
+                <p style={{ color:'#e74c3c', fontSize:'15px', margin:'0 0 16px' }}>{erroCam}</p>
+                <button
+                  onClick={() => { localStorage.setItem('cameraPermitida', 'true'); setCameraPermitida(true); }}
+                  style={{ marginBottom:'12px', background:'transparent', border:'none', color:'#555', fontSize:'15px', cursor:'pointer', textDecoration:'underline', display:'block', width:'100%' }}
+                >
+                  Continuar sem câmera
+                </button>
+              </>
+            )}
+            <button
+              onClick={pedirPermissaoCamera}
+              disabled={solicitandoCam}
+              style={{ width:'100%', padding:'18px', fontSize:'20px', backgroundColor: solicitandoCam ? '#333' : '#0070f3', color:'white', border:'none', borderRadius:'12px', cursor: solicitandoCam ? 'default' : 'pointer', fontWeight:700, transition:'background .2s' }}
+            >
+              {solicitandoCam ? 'Aguardando...' : 'Permitir câmera'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Overlay noturno */}
       {noturno && (
