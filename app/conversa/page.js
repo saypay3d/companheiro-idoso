@@ -19,6 +19,7 @@ export default function Conversa() {
     const h = new Date().getHours();
     return h >= 21 || h < 7;
   });
+  const [silenciado,  setSilenciado]  = useState(false);
   const router = useRouter();
 
   // Wake Lock — mantém a tela sempre ligada
@@ -72,6 +73,8 @@ export default function Conversa() {
   }, []);
 
   const pausarRef           = useRef(false);
+  const silenciadoRef       = useRef(false);
+  const reativarRef         = useRef(null);
   const usuarioIdRef        = useRef(null);
   const recRef              = useRef(null);
   const enviarRef           = useRef(null);
@@ -149,6 +152,7 @@ export default function Conversa() {
 
     function agendarProximaAcao() {
       clearTimeout(timerPuxarRef.current);
+      if (silenciadoRef.current) return;
       if (isNoite()) {
         timerPuxarRef.current = setTimeout(entrarVigia, VIGIA_APOS_MS);
       } else {
@@ -158,6 +162,7 @@ export default function Conversa() {
     }
 
     function entrarVigia() {
+      if (silenciadoRef.current) return;
       if (pausarRef.current) {
         timerPuxarRef.current = setTimeout(entrarVigia, 60000);
         return;
@@ -172,6 +177,7 @@ export default function Conversa() {
     }
 
     async function puxarConversa() {
+      if (silenciadoRef.current) return;
       if (isNoite()) {
         agendarProximaAcao();
         return;
@@ -293,7 +299,7 @@ export default function Conversa() {
     }
 
     function iniciarEscuta() {
-      if (pausarRef.current) return;
+      if (pausarRef.current || silenciadoRef.current) return;
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) { setSemSupporte(true); return; }
 
@@ -339,14 +345,15 @@ export default function Conversa() {
           salvarAtividadeNoturna('barulho', 'Som detectado sem palavras reconhecidas');
           detectouSom = false;
         }
-        if (!pausarRef.current) setTimeout(iniciarEscuta, 300);
+        if (!pausarRef.current && !silenciadoRef.current) setTimeout(iniciarEscuta, 300);
       };
 
       recRef.current = rec;
       try { rec.start(); } catch (e) { console.error(e); }
     }
 
-    enviarRef.current = enviarParaIA;
+    enviarRef.current  = enviarParaIA;
+    reativarRef.current = () => { iniciarEscuta(); agendarProximaAcao(); };
 
     const timerInicio = setTimeout(iniciarEscuta, 800);
     agendarProximaAcao();
@@ -370,6 +377,22 @@ export default function Conversa() {
     return () => clearInterval(intervalo);
   }, []);
 
+  const toggleSilencio = () => {
+    if (!silenciado) {
+      silenciadoRef.current = true;
+      setSilenciado(true);
+      clearTimeout(timerPuxarRef.current);
+      try { recRef.current?.stop(); } catch (e) {}
+      setEstado('silencio');
+    } else {
+      silenciadoRef.current = false;
+      pausarRef.current = false;
+      setSilenciado(false);
+      setEstado('ouvindo');
+      reativarRef.current?.();
+    }
+  };
+
   const calibEnviar = () => {
     const texto = inputCalib.trim();
     if (!texto || !enviarRef.current) return;
@@ -386,6 +409,7 @@ export default function Conversa() {
     falando:    'Falando...',
     vigia:      'Estou de vigia...',
     preocupado: 'Estou preocupada com você...',
+    silencio:   'Em silêncio...',
   }[estado] ?? 'Estou aqui...';
 
   const statusCor = {
@@ -395,6 +419,7 @@ export default function Conversa() {
     iniciando:  '#555',
     vigia:      '#4a7f9f',
     preocupado: '#e67e22',
+    silencio:   '#555',
   }[estado] ?? '#555';
 
   return (
@@ -463,6 +488,31 @@ export default function Conversa() {
           </p>
         </div>
       )}
+
+      {/* Botão silenciar */}
+      <button
+        onClick={toggleSilencio}
+        title={silenciado ? 'Reativar microfone' : 'Silenciar microfone'}
+        style={{
+          position:'absolute', bottom:24, left:'50%', transform:'translateX(-50%)',
+          width:52, height:52, borderRadius:'50%',
+          background: silenciado ? '#3a1a1a' : '#1e1e1e',
+          border: `1px solid ${silenciado ? '#8b2222' : '#333'}`,
+          color: silenciado ? '#e74c3c' : '#555',
+          cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
+          zIndex:20, transition:'all .2s',
+        }}
+      >
+        {silenciado ? (
+          <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+            <path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/>
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/>
+          </svg>
+        )}
+      </button>
 
       {/* Overlay noturno */}
       {noturno && (
