@@ -64,9 +64,7 @@ export async function POST(req) {
     ].filter(Boolean);
 
     if (partes.length > 0) {
-      const textoCompleto = partes.join('\n');
-      const textoCortado = textoCompleto.length > 300 ? textoCompleto.slice(0, 300) + '...' : textoCompleto;
-      perfilTexto = '\n\nInformações sobre essa pessoa:\n' + textoCortado;
+      perfilTexto = '\n\nInformações sobre essa pessoa:\n' + partes.join('\n');
     }
   }
 
@@ -87,8 +85,7 @@ export async function POST(req) {
     ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
     : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
 
-  const systemPromptFinal = systemPrompt.length > 400 ? systemPrompt.slice(0, 400) : systemPrompt;
-  console.log('[conversas] system prompt chars:', systemPromptFinal.length);
+  console.log('[conversas] system prompt completo:\n' + systemPrompt);
 
   const historicoOrdenado = historico.reverse();
 
@@ -103,7 +100,7 @@ export async function POST(req) {
 
   // Formato OpenRouter
   const mensagens = [
-    { role: 'system', content: systemPromptFinal },
+    { role: 'system', content: systemPrompt },
     ...historicoOrdenado.flatMap(c => [
       { role: 'user',      content: c.mensagem_usuario },
       { role: 'assistant', content: c.mensagem_ia },
@@ -123,7 +120,7 @@ export async function POST(req) {
       fetchUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + provedor.modelo + ':generateContent?key=' + process.env.GOOGLE_AI_KEY;
       fetchHeaders = { 'Content-Type': 'application/json' };
       fetchBody = JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPromptFinal }] },
+        systemInstruction: { parts: [{ text: systemPrompt }] },
         contents,
         generationConfig: { maxOutputTokens: 150 },
       });
