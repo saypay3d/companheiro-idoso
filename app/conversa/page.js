@@ -483,10 +483,115 @@ export default function Conversa() {
 
     const intervaloObservacao = setInterval(verificarObservacao, 15000);
 
+    // Mensagens do cuidador — verifica a cada 10 segundos
+    async function verificarMensagensCuidador() {
+      if (pausarRef.current) return;
+      try {
+        console.log('[mensagens] etapa1: verificando mensagens nao lidas...');
+        const res = await fetch(`/api/cuidador-mensagem?usuario_id=${usuarioIdRef.current}&nao_lida=true`);
+        if (!res.ok) { console.error('[mensagens] etapa1 GET falhou:', res.status); return; }
+        const msgs = await res.json();
+        if (!msgs || msgs.length === 0) return;
+
+        const msg = msgs[0];
+        console.log('[mensagens] etapa1 OK — mensagem id:', msg.id, '| de:', msg.de_nome);
+
+        // Etapa 2: parar escuta e mudar estado para falando
+        console.log('[mensagens] etapa2: pausando escuta, mudando estado para falando');
+        pausarRef.current = true;
+        try { recRef.current?.stop(); } catch (e) {}
+        clearTimeout(timerPuxarRef.current);
+        setEstado('falando');
+
+        // Etapa 3: anunciar remetente
+        console.log('[mensagens] etapa3: falando "Voce tem uma mensagem de', msg.de_nome + '"');
+        await falar(`Você tem uma mensagem de ${msg.de_nome}`);
+
+        // Etapa 4: aguardar 2 segundos
+        console.log('[mensagens] etapa4: aguardando 2 segundos...');
+        await new Promise(r => setTimeout(r, 2000));
+
+        // Etapa 5: ler a mensagem
+        console.log('[mensagens] etapa5: lendo mensagem:', msg.mensagem);
+        await falar(msg.mensagem);
+
+        // Etapa 6: aguardar resposta por 10 segundos
+        console.log('[mensagens] etapa6: ativando microfone, aguardando resposta por 10s...');
+        setEstado('ouvindo');
+
+        const respostaTexto = await new Promise((resolve) => {
+          const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (!SR) { console.warn('[mensagens] SpeechRecognition nao disponivel'); resolve(null); return; }
+          let done = false;
+          const fin = (v) => { if (!done) { done = true; resolve(v); } };
+
+          const recResp = new SR();
+          recResp.lang           = 'pt-BR';
+          recResp.continuous     = false;
+          recResp.interimResults = false;
+
+          const timeout = setTimeout(() => {
+            console.log('[mensagens] etapa6: timeout de 10s sem resposta');
+            try { recResp.stop(); } catch (e) {}
+            fin(null);
+          }, 10000);
+
+          recResp.onresult = (e) => {
+            const r = e.results[e.results.length - 1];
+            if (r.isFinal) {
+              clearTimeout(timeout);
+              const texto = r[0].transcript.trim();
+              console.log('[mensagens] etapa6: resposta capturada:', texto);
+              fin(texto);
+            }
+          };
+          recResp.onerror = (e) => { console.error('[mensagens] etapa6 rec erro:', e.error); clearTimeout(timeout); fin(null); };
+          recResp.onend   = () => fin(null);
+          try { recResp.start(); } catch (e) { console.error('[mensagens] etapa6 start erro:', e.message); fin(null); }
+        });
+
+        if (respostaTexto) {
+          // Etapa 7: salvar resposta
+          console.log('[mensagens] etapa7: salvando resposta via PATCH, id:', msg.id);
+          await fetch('/api/cuidador-mensagem', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: msg.id, resposta: respostaTexto }),
+          });
+          console.log('[mensagens] etapa7 OK: resposta salva');
+          setEstado('falando');
+          await falar('Mensagem enviada para ' + msg.de_nome);
+        } else {
+          // Etapa 7: marcar como lida sem resposta
+          console.log('[mensagens] etapa7: sem resposta, marcando mensagem', msg.id, 'como lida');
+          await fetch('/api/cuidador-mensagem', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: msg.id, lida: true }),
+          });
+          console.log('[mensagens] etapa7 OK: marcada como lida');
+        }
+
+        console.log('[mensagens] fluxo concluido, retomando escuta normal');
+        pausarRef.current = false;
+        setEstado('ouvindo');
+        iniciarEscuta();
+        agendarProximaAcao();
+      } catch (e) {
+        console.error('[mensagens] erro no fluxo:', e.name, e.message, e.stack);
+        pausarRef.current = false;
+        setEstado('ouvindo');
+        try { iniciarEscuta(); } catch (_) {}
+      }
+    }
+
+    const intervaloMensagens = setInterval(verificarMensagensCuidador, 10000);
+
     return () => {
       clearTimeout(timerInicio);
       clearTimeout(timerPuxarRef.current);
       clearInterval(intervaloObservacao);
+      clearInterval(intervaloMensagens);
       pausarRef.current = true;
       try { recRef.current?.stop(); } catch (e) {}
       window.speechSynthesis?.cancel();
