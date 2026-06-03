@@ -423,7 +423,7 @@ export default function Conversa() {
   }[estado] ?? '#555';
 
   return (
-    <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', backgroundColor:'#1a1a1a', overflow:'hidden' }}>
+    <div style={{ position:'fixed', inset:0, display:'flex', flexDirection:'column', alignItems:'center', backgroundColor:'#1a1a1a', overflow:'hidden', paddingTop:'56px', paddingBottom:'76px' }}>
 
       {/* Barra superior */}
       <div style={{ position:'absolute', top:16, left:16, right:16, display:'flex', justifyContent:'space-between', alignItems:'flex-start', zIndex:20 }}>
@@ -463,26 +463,24 @@ export default function Conversa() {
         </div>
       </div>
 
-      {/* Nome */}
-      {nomeUsuario && (
-        <p style={{ fontSize:'26px', color:'#666', margin:'0 0 24px', letterSpacing:'.03em' }}>
-          Olá, {nomeUsuario}!
-        </p>
-      )}
-
-      {/* Avatar */}
-      <div style={{ width:'70vmin', height:'70vmin' }}>
+      {/* Avatar — ocupa toda a área disponível acima do status */}
+      <div style={{ flex:1, minHeight:0, width:'100%' }}>
         <Avatar estado={estado} tipo={avatarTipo} />
       </div>
 
-      {/* Status */}
-      <p style={{ fontSize:'28px', fontWeight:300, margin:'28px 0 0', color: semSupporte ? '#e74c3c' : statusCor, textAlign:'center', transition:'color .5s ease', letterSpacing:'.04em', padding:'0 24px' }}>
+      {/* Nome + Status na base */}
+      {nomeUsuario && (
+        <p style={{ fontSize:'18px', color:'#555', margin:'6px 0 0', letterSpacing:'.03em' }}>
+          {nomeUsuario}
+        </p>
+      )}
+      <p style={{ fontSize:'26px', fontWeight:300, margin:'4px 0 0', color: semSupporte ? '#e74c3c' : statusCor, textAlign:'center', transition:'color .5s ease', letterSpacing:'.04em', padding:'0 24px' }}>
         {semSupporte ? '⚠️ Use o Google Chrome para ativar o microfone' : statusTexto}
       </p>
 
       {/* Erro debug — visível só quando há falha */}
       {erroDebug && (
-        <div style={{ margin:'16px 24px 0', padding:'10px 14px', backgroundColor:'#2a0a0a', border:'1px solid #6b1a1a', borderRadius:'10px', maxWidth:'600px', width:'calc(100% - 48px)' }}>
+        <div style={{ margin:'6px 24px 0', padding:'8px 12px', backgroundColor:'#2a0a0a', border:'1px solid #6b1a1a', borderRadius:'10px', maxWidth:'600px', width:'calc(100% - 48px)' }}>
           <p style={{ margin:0, fontSize:'13px', color:'#e57373', fontFamily:'monospace', wordBreak:'break-all', lineHeight:1.5 }}>
             ⚠ Erro OpenRouter: {erroDebug}
           </p>
