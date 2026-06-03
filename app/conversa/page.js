@@ -471,7 +471,7 @@ export default function Conversa() {
       )}
 
       {/* Avatar */}
-      <div style={{ width:'clamp(260px, 55vh, 420px)', height:'clamp(260px, 55vh, 420px)' }}>
+      <div style={{ width:'70vmin', height:'70vmin' }}>
         <Avatar estado={estado} tipo={avatarTipo} />
       </div>
 
