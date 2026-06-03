@@ -13,6 +13,9 @@ export default function Configurar() {
   const [avatarEscolhido, setAvatarEscolhido] = useState('vovo');
   const [vozEscolhida, setVozEscolhida]       = useState('feminina');
   const [nomeUsuario,   setNomeUsuario]        = useState('');
+  const [adminAberto,   setAdminAberto]        = useState(false);
+  const [adminSenha,    setAdminSenha]         = useState('');
+  const [adminErro,     setAdminErro]          = useState('');
   const router = useRouter();
 
   useEffect(() => {
@@ -32,6 +35,22 @@ export default function Configurar() {
       })
       .catch(() => {});
   }, [router]);
+
+  const entrarAdmin = async () => {
+    setAdminErro('');
+    const res = await fetch('/api/verificar-senha', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ senha: adminSenha }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      localStorage.setItem('is_admin', 'true');
+      router.push('/admin');
+    } else {
+      setAdminErro('Senha incorreta.');
+    }
+  };
 
   const comecar = () => {
     localStorage.setItem('avatar_tipo', avatarEscolhido);
@@ -170,7 +189,7 @@ export default function Configurar() {
         </button>
 
         {/* Links discretos */}
-        <div style={{ marginTop: '28px', display: 'flex', gap: '24px', justifyContent: 'center' }}>
+        <div style={{ marginTop: '28px', display: 'flex', gap: '24px', justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={() => router.push('/relatorio')}
             style={{ background: 'transparent', border: 'none', color: '#444', fontSize: '15px', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
@@ -189,7 +208,43 @@ export default function Configurar() {
           >
             Perfil do Idoso
           </button>
+          <button
+            onClick={() => { setAdminAberto(true); setAdminSenha(''); setAdminErro(''); }}
+            style={{ background: 'transparent', border: 'none', color: '#333', fontSize: '15px', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
+          >
+            Admin
+          </button>
         </div>
+
+        {/* Prompt de senha admin */}
+        {adminAberto && (
+          <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+            <input
+              type="password"
+              placeholder="Senha admin"
+              value={adminSenha}
+              onChange={(e) => setAdminSenha(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && entrarAdmin()}
+              autoFocus
+              style={{ fontSize: '18px', padding: '10px', width: '220px', borderRadius: '8px', border: '1px solid #444', background: '#111', color: '#fff' }}
+            />
+            {adminErro && <p style={{ color: 'red', fontSize: '15px', margin: 0 }}>{adminErro}</p>}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={entrarAdmin}
+                style={{ padding: '8px 20px', fontSize: '16px', backgroundColor: '#0070f3', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Entrar
+              </button>
+              <button
+                onClick={() => setAdminAberto(false)}
+                style={{ padding: '8px 20px', fontSize: '16px', background: 'transparent', color: '#666', border: '1px solid #333', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
     </>
