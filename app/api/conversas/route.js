@@ -78,13 +78,13 @@ export async function POST(req) {
   console.log('[memoria] itens:', perfil.length);
 
   const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem. Responda em no máximo 15 palavras de forma direta e natural.';
-  const instrucaoMemoria = ' NUNCA invente informações. Use SOMENTE o que está no seu contexto. Se não sabe, diga que não lembra.';
+  const instrucaoMemoria = `REGRA ABSOLUTA: NUNCA INVENTE INFORMAÇÕES SOBRE O USUÁRIO. NUNCA DIGA QUE ALGO ACONTECEU SE NÃO FOI DITO. SE NÃO SABE ALGO PERGUNTE EM VEZ DE INVENTAR. USE SOMENTE INFORMAÇÕES DO PERFIL E DAS MEMÓRIAS ABAIXO. SE O USUÁRIO MENCIONAR ANIMAIS DE ESTIMAÇÃO, NOMES DE PESSOAS, DATAS OU QUALQUER DADO PESSOAL, SEMPRE SALVE NA MEMÓRIA.`;
 
   const systemPrompt = puxar
-    ? `Você é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Faça uma fala espontânea e natural para iniciar conversa. Responda em no máximo 15 palavras. Português brasileiro informal. Varie sempre.${perfilTexto}${memoriaTexto}${instrucaoMemoria}`
+    ? `${instrucaoMemoria}\n\nVocê é um companheiro virtual atencioso de ${nome}, uma senhora de 91 anos. Faça uma fala espontânea e natural para iniciar conversa. Responda em no máximo 15 palavras. Português brasileiro informal. Varie sempre.${perfilTexto}${memoriaTexto}`
     : modo_noite
-    ? `Você é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}${instrucaoMemoria}`
-    : `Você é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}${instrucaoMemoria}`;
+    ? `${instrucaoMemoria}\n\nVocê é um companheiro virtual carinhoso de ${nome}, uma senhora de 91 anos. É noite. Responda com carinho e calma, 1 frase curta. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`
+    : `${instrucaoMemoria}\n\nVocê é um companheiro virtual de uma senhora de 91 anos chamada ${nome}. Fale de forma natural, simples e afetuosa. NÃO use "minha querida" a todo momento. Respostas de 1 a 2 frases. Português brasileiro informal.${perfilTexto}${memoriaTexto}${instrucaoEnvio}`;
 
   console.log('[conversas] system prompt completo:\n' + systemPrompt);
 
@@ -189,7 +189,15 @@ export async function POST(req) {
 
   // Extração de memória — mesmo modelo que respondeu
   if (!puxar && mensagem_usuario && provedorUsado) {
-    const promptExtracao = `Extraia dados pessoais desta frase do usuario. Responda SOMENTE em JSON: {"dados":[{"tipo":string,"valor":string}]}. Se nao houver dados responda {"dados":[]}. Frase: ${mensagem_usuario}`;
+    const promptExtracao = `Extraia dados pessoais desta frase do usuario. Responda SOMENTE em JSON: {"dados":[{"tipo":string,"valor":string}]}. Se nao houver dados responda {"dados":[]}.
+Exemplos:
+- "meu cachorro se chama Rex" -> {"dados":[{"tipo":"animal","valor":"cachorro chamado Rex"}]}
+- "tenho dois gatos" -> {"dados":[{"tipo":"animal","valor":"tem dois gatos"}]}
+- "meu filho se chama Joao" -> {"dados":[{"tipo":"familiar","valor":"filho chamado Joao"}]}
+- "adoro tomar cafe de manha" -> {"dados":[{"tipo":"gosto","valor":"gosta de cafe de manha"}]}
+- "estou com dor no joelho" -> {"dados":[{"tipo":"saude","valor":"dor no joelho"}]}
+- "como vai voce?" -> {"dados":[]}
+Frase: ${mensagem_usuario}`;
 
     try {
       let extractUrl, extractHeaders, extractBody;
