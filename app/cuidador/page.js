@@ -14,7 +14,8 @@ function CuidadorContent() {
   const [obsStatus,  setObsStatus]  = useState('idle'); // idle | loading | done
   const [obsVideo,   setObsVideo]   = useState(null);
   const [obsHorario, setObsHorario] = useState(null);
-  const pollingRef = useRef(null);
+  const pollingRef    = useRef(null);
+  const intervaloMsgRef = useRef(null);
 
   useEffect(() => {
     if (!token) { setErro('Token inválido ou ausente.'); return; }
@@ -28,12 +29,34 @@ function CuidadorContent() {
       })
       .catch(() => setErro('Erro ao validar token.'));
 
-    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+    return () => {
+      if (pollingRef.current)    clearInterval(pollingRef.current);
+      if (intervaloMsgRef.current) clearInterval(intervaloMsgRef.current);
+    };
   }, [token]);
 
+  // Polling de mensagens — inicia quando dados carregam
+  useEffect(() => {
+    if (!dados) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/cuidador-mensagem?usuario_id=${dados.id}`);
+        if (res.ok) setMensagens(await res.json());
+      } catch (e) {
+        console.warn('[cuidador msgs]', e.message);
+      }
+    };
+    intervaloMsgRef.current = setInterval(poll, 10000);
+    return () => clearInterval(intervaloMsgRef.current);
+  }, [dados]);
+
   async function carregarMensagens(usuarioId) {
-    const res = await fetch(`/api/cuidador-mensagem?usuario_id=${usuarioId}`);
-    setMensagens(await res.json());
+    try {
+      const res = await fetch(`/api/cuidador-mensagem?usuario_id=${usuarioId}`);
+      if (res.ok) setMensagens(await res.json());
+    } catch (e) {
+      console.warn('[cuidador] carregarMensagens erro:', e.message);
+    }
   }
 
   async function enviarMensagem() {
@@ -174,22 +197,36 @@ function CuidadorContent() {
 
       {/* Lista de mensagens */}
       <section>
-        <h2 style={{ fontSize: '20px', margin: '0 0 16px' }}>Mensagens enviadas</h2>
+        <h2 style={{ fontSize: '20px', margin: '0 0 4px' }}>Mensagens enviadas</h2>
+        <p style={{ fontSize: '13px', color: '#444', margin: '0 0 16px' }}>Atualiza automaticamente a cada 10 segundos.</p>
         {mensagens.length === 0 && (
           <p style={{ color: '#444', fontSize: '16px' }}>Nenhuma mensagem enviada ainda.</p>
         )}
         {mensagens.map(m => (
-          <div key={m.id} style={{ marginBottom: '14px', padding: '14px', backgroundColor: '#1a1a1a', borderRadius: '10px', border: '1px solid #222' }}>
-            <p style={{ fontSize: '12px', color: '#444', margin: '0 0 6px' }}>
-              {new Date(m.criado_em).toLocaleString('pt-BR')} — {m.de_nome}
-            </p>
-            <p style={{ fontSize: '16px', color: '#ccc', margin: '0 0 8px' }}>{m.mensagem}</p>
-            {m.resposta
-              ? <p style={{ fontSize: '15px', color: '#2ecc71', margin: 0, paddingTop: '8px', borderTop: '1px solid #222' }}>
-                  Resposta: {m.resposta}
+          <div key={m.id} style={{ marginBottom: '16px', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${m.resposta ? '#1a5a2a' : '#222'}` }}>
+            {/* Mensagem enviada pelo cuidador */}
+            <div style={{ padding: '14px', backgroundColor: '#1a1a1a' }}>
+              <p style={{ fontSize: '12px', color: '#444', margin: '0 0 6px' }}>
+                {new Date(m.criado_em).toLocaleString('pt-BR')} — {m.de_nome}
+              </p>
+              <p style={{ fontSize: '16px', color: '#ccc', margin: 0 }}>{m.mensagem}</p>
+            </div>
+
+            {/* Resposta do idoso — destaque verde */}
+            {m.resposta ? (
+              <div style={{ padding: '14px', backgroundColor: '#0a2a12', borderTop: '1px solid #1a5a2a' }}>
+                <p style={{ fontSize: '11px', color: '#2a7a3a', margin: '0 0 6px', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                  Resposta do idoso
                 </p>
-              : <p style={{ fontSize: '13px', color: '#333', margin: 0, fontStyle: 'italic' }}>Aguardando resposta...</p>
-            }
+                <p style={{ fontSize: '17px', color: '#2ecc71', margin: 0, fontWeight: 500 }}>
+                  {m.resposta}
+                </p>
+              </div>
+            ) : (
+              <div style={{ padding: '10px 14px', backgroundColor: '#141414', borderTop: '1px solid #1e1e1e' }}>
+                <p style={{ fontSize: '13px', color: '#333', margin: 0, fontStyle: 'italic' }}>Aguardando resposta do idoso...</p>
+              </div>
+            )}
           </div>
         ))}
       </section>
