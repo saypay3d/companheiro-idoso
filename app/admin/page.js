@@ -8,6 +8,7 @@ export default function Admin() {
   const [novaSenha, setNovaSenha] = useState('');
   const [resetSenhas, setResetSenhas] = useState({});
   const [msg, setMsg] = useState('');
+  const [obsMsg, setObsMsg] = useState({});
   const router = useRouter();
 
   useEffect(() => {
@@ -44,6 +45,17 @@ export default function Admin() {
     setMsg('Senha redefinida!');
     setResetSenhas(prev => ({ ...prev, [id]: '' }));
     carregarUsuarios();
+  }
+
+  async function verIdoso(id) {
+    setObsMsg(prev => ({ ...prev, [id]: 'Solicitando...' }));
+    const res = await fetch('/api/observacao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario_id: id }),
+    });
+    const data = await res.json();
+    setObsMsg(prev => ({ ...prev, [id]: `Solicitado às ${new Date(data.solicitado_em).toLocaleTimeString('pt-BR')}` }));
   }
 
   function sair() {
@@ -88,11 +100,20 @@ export default function Admin() {
       {usuarios.length === 0 && <p style={{ color: '#666' }}>Nenhum usuário cadastrado.</p>}
       {usuarios.map(u => (
         <div key={u.id} style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '15px', marginBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
             <strong style={{ fontSize: '20px' }}>{u.nome}</strong>
             <span style={{ color: '#666', fontSize: '15px' }}>
               Senha: {u.tem_senha ? '••••••' : <em>não definida</em>}
             </span>
+            <button
+              onClick={() => verIdoso(u.id)}
+              style={{ padding: '6px 14px', fontSize: '15px', backgroundColor: '#1a3a5c', color: '#7ab3ef', border: '1px solid #2a5a8c', borderRadius: '6px', cursor: 'pointer' }}
+            >
+              Ver Idoso
+            </button>
+            {obsMsg[u.id] && (
+              <span style={{ fontSize: '13px', color: '#4a9eff' }}>{obsMsg[u.id]}</span>
+            )}
           </div>
           <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
             <input
