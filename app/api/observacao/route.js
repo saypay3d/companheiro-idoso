@@ -1,3 +1,5 @@
+export const config = { api: { bodyParser: { sizeLimit: '10mb' } } };
+
 import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL);
