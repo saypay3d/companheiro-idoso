@@ -111,6 +111,7 @@ export async function POST(req) {
 
   const erros = [];
   let respostaFinal = null;
+  let provedorUsado = null;
 
   for (const provedor of PROVEDORES) {
     console.log('[conversas] Tentando:', provedor.tipo, provedor.modelo);
@@ -165,6 +166,7 @@ export async function POST(req) {
 
     if (res.ok && conteudo && conteudo.trim().length > 0) {
       respostaFinal = conteudo.trim();
+      provedorUsado = provedor;
       console.log('[conversas] Sucesso com', provedor.modelo, '| resposta:', respostaFinal);
       break;
     }
@@ -185,52 +187,39 @@ export async function POST(req) {
   await sql`INSERT INTO conversas (usuario_id, mensagem_usuario, mensagem_ia)
             VALUES (${usuario_id}, ${mensagemSalva}, ${mensagem_ia})`;
 
-  // Extração de memória — aguardada para garantir salvamento antes de retornar
-  if (!puxar && mensagem_usuario) {
-    const promptExtracao = `Você é um extrator de informações pessoais. Analise a mensagem abaixo e extraia dados relevantes sobre a pessoa que falou.
-
-Categorias possíveis: familiar, gosto, saúde, hábito, emoção, preferência, evento.
-
-Exemplos:
-- "meu neto Pedro veio me visitar" → {"dados": [{"tipo": "familiar", "valor": "neto chamado Pedro"}]}
-- "adoro tomar café de manhã" → {"dados": [{"tipo": "gosto", "valor": "gosta de café de manhã"}]}
-- "estou com dor no joelho" → {"dados": [{"tipo": "saúde", "valor": "dor no joelho"}]}
-- "como vai você?" → {"dados": []}
-
-Responda APENAS com o JSON válido, sem texto adicional, sem markdown.
-
-Mensagem: "${mensagem_usuario}"`;
+  // Extração de memória — mesmo modelo que respondeu
+  if (!puxar && mensagem_usuario && provedorUsado) {
+    const promptExtracao = `Extraia dados pessoais desta frase do usuario. Responda SOMENTE em JSON: {"dados":[{"tipo":string,"valor":string}]}. Se nao houver dados responda {"dados":[]}. Frase: ${mensagem_usuario}`;
 
     try {
-      const extractRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + process.env.GOOGLE_AI_KEY, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: promptExtracao }] }],
-        }),
-      });
+      let extractUrl, extractHeaders, extractBody;
+      if (provedorUsado.tipo === 'google') {
+        extractUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + provedorUsado.modelo + ':generateContent?key=' + process.env.GOOGLE_AI_KEY;
+        extractHeaders = { 'Content-Type': 'application/json' };
+        extractBody = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: promptExtracao }] }] });
+      } else {
+        extractUrl = 'https://openrouter.ai/api/v1/chat/completions';
+        extractHeaders = { 'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY, 'Content-Type': 'application/json' };
+        extractBody = JSON.stringify({ model: provedorUsado.modelo, messages: [{ role: 'user', content: promptExtracao }], max_tokens: 200 });
+      }
+
+      const extractRes = await fetch(extractUrl, { method: 'POST', headers: extractHeaders, body: extractBody });
       const extractData = await extractRes.json();
-      const raw = extractData.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const raw = provedorUsado.tipo === 'google'
+        ? extractData.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+        : extractData.choices?.[0]?.message?.content ?? '';
       console.log('[memoria] resposta bruta:', raw);
+
       const jsonStr = raw.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(jsonStr);
-      if (!Array.isArray(parsed.dados) || parsed.dados.length === 0) {
-        console.log('[memoria] nada relevante extraído');
-      } else {
+
+      if (Array.isArray(parsed.dados)) {
         for (const item of parsed.dados) {
           if (!item.tipo || !item.valor) continue;
           const tipo  = String(item.tipo).slice(0, 100);
           const valor = String(item.valor).slice(0, 500);
-          const existe = await sql`
-            SELECT 1 FROM perfil_usuario
-            WHERE usuario_id = ${usuario_id} AND tipo = ${tipo} AND valor = ${valor} LIMIT 1`;
-          if (existe.length === 0) {
-            await sql`INSERT INTO perfil_usuario (usuario_id, tipo, valor)
-                      VALUES (${usuario_id}, ${tipo}, ${valor})`;
-            console.log('[memoria] novo dado salvo:', tipo, '->', valor);
-          } else {
-            console.log('[memoria] já existe, ignorando:', tipo, '->', valor);
-          }
+          await sql`INSERT INTO perfil_usuario (usuario_id, tipo, valor) VALUES (${usuario_id}, ${tipo}, ${valor})`;
+          console.log('[memoria] salvo:', tipo, '->', valor);
         }
       }
     } catch (e) {
