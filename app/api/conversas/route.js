@@ -109,8 +109,17 @@ export async function POST(req) {
     console.warn('[contexto] falhou ou timeout:', e.message);
   }
 
+  const agora   = new Date();
+  const ptsDt   = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: 'numeric', minute: '2-digit', hour12: false,
+    day: 'numeric', month: 'long', year: 'numeric', weekday: 'long',
+  }).formatToParts(agora);
+  const getDt   = t => ptsDt.find(p => p.type === t)?.value ?? '';
+  const dataHoraTexto = `Agora são ${getDt('hour')}h${getDt('minute')} do dia ${getDt('day')} de ${getDt('month')} de ${getDt('year')}, ${getDt('weekday')}.`;
+
   const instrucaoEnvio = ' Se o usuário pedir para mandar mensagem para alguém, pergunte o que quer dizer, depois repita a mensagem e pergunte se pode enviar. Se confirmar, responda exatamente neste formato sem mais nada: ENVIAR_MSG:nome:mensagem. Responda em no máximo 15 palavras de forma direta e natural.';
-  const instrucaoMemoria = `REGRA ABSOLUTA: NUNCA INVENTE INFORMAÇÕES SOBRE O USUÁRIO. NUNCA DIGA QUE ALGO ACONTECEU SE NÃO FOI DITO. SE NÃO SABE ALGO PERGUNTE EM VEZ DE INVENTAR. USE SOMENTE INFORMAÇÕES DO PERFIL E DAS MEMÓRIAS ABAIXO. SE O USUÁRIO MENCIONAR ANIMAIS DE ESTIMAÇÃO, NOMES DE PESSOAS, DATAS OU QUALQUER DADO PESSOAL, SEMPRE SALVE NA MEMÓRIA.`;
+  const instrucaoMemoria = `REGRA ABSOLUTA: NUNCA INVENTE INFORMAÇÕES SOBRE O USUÁRIO. NUNCA DIGA QUE ALGO ACONTECEU SE NÃO FOI DITO. SE NÃO SABE ALGO PERGUNTE EM VEZ DE INVENTAR. USE SOMENTE INFORMAÇÕES DO PERFIL E DAS MEMÓRIAS ABAIXO. SE O USUÁRIO MENCIONAR ANIMAIS DE ESTIMAÇÃO, NOMES DE PESSOAS, DATAS OU QUALQUER DADO PESSOAL, SEMPRE SALVE NA MEMÓRIA.\n\n${dataHoraTexto}`;
 
   const systemPrompt = puxar
     ? `${instrucaoMemoria}\n\nVocê é um companheiro virtual atencioso de ${nome}, ${descricao} de 91 anos. Trate-o(a) como ${tratamento}. Use os pronomes corretos: ${genero === 'Homem' ? 'ele, dele, para ele' : 'ela, dela, para ela'}. Faça uma fala espontânea e natural para iniciar conversa. Responda de forma elaborada e envolvente com 3 a 5 frases. Conte histórias, curiosidades ou fatos interessantes relacionados ao que o idoso disse. Faça perguntas para manter a conversa fluindo. Seja caloroso e interessante como um amigo que tem muita história pra contar. Se o idoso falar pouco, aproveite o que ele disse e desenvolva o assunto para manter a atenção dele. Português brasileiro informal. Varie sempre.${perfilTexto}${memoriaTexto}${contextoTexto}`
