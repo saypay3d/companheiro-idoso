@@ -5,11 +5,10 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 const PROVEDORES = [
+  { tipo: 'openrouter', modelo: 'deepseek/deepseek-chat' },
   { tipo: 'openrouter', modelo: 'deepseek/deepseek-v4-flash' },
   { tipo: 'openrouter', modelo: 'google/gemma-4-31b-it:free' },
   { tipo: 'google',     modelo: 'gemini-2.0-flash' },
-  { tipo: 'openrouter', modelo: 'deepseek/deepseek-v4-flash:free' },
-  { tipo: 'openrouter', modelo: 'qwen/qwen3-4b:free' },
 ];
 
 export async function POST(req) {
@@ -201,9 +200,10 @@ export async function POST(req) {
       continue;
     }
 
+    const msg = data.choices?.[0]?.message;
     const conteudo = provedor.tipo === 'google'
       ? data.candidates?.[0]?.content?.parts?.[0]?.text
-      : data.choices?.[0]?.message?.content;
+      : (msg?.content ?? (provedor.modelo === 'deepseek/deepseek-v4-flash' ? msg?.reasoning : null));
 
     if (res.ok && conteudo && conteudo.trim().length > 0) {
       respostaFinal = conteudo.trim();
