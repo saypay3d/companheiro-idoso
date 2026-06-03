@@ -8,7 +8,10 @@ export default function Admin() {
   const [novaSenha,   setNovaSenha]   = useState('');
   const [resetSenhas, setResetSenhas] = useState({});
   const [msg,         setMsg]         = useState('');
-  const [obsState,    setObsState]    = useState({}); // { [userId]: { status, obsId, video, solicitado_em } }
+  const [obsState,      setObsState]      = useState({});
+  const [cuidadorAberto, setCuidadorAberto] = useState({});
+  const [cuidadorNome,   setCuidadorNome]   = useState({});
+  const [cuidadorLink,   setCuidadorLink]   = useState({});
   const pollingRefs = useRef({});
   const router = useRouter();
 
@@ -47,6 +50,21 @@ export default function Admin() {
     });
     setMsg('Senha redefinida!');
     setResetSenhas(prev => ({ ...prev, [id]: '' }));
+    carregarUsuarios();
+  }
+
+  async function gerarLinkCuidador(userId) {
+    const nome = (cuidadorNome[userId] || '').trim();
+    if (!nome) { setMsg('Digite o nome do cuidador.'); return; }
+    const res  = await fetch('/api/cuidador', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario_id: userId, cuidador_nome: nome }),
+    });
+    const data = await res.json();
+    const link = `https://companheiro-idoso.vercel.app/cuidador?token=${data.token}`;
+    setCuidadorLink(prev => ({ ...prev, [userId]: link }));
+    setCuidadorAberto(prev => ({ ...prev, [userId]: false }));
     carregarUsuarios();
   }
 
@@ -143,6 +161,51 @@ export default function Admin() {
                 Ver Idoso
               </button>
             </div>
+
+            {/* Botão Gerar Link Cuidador */}
+            <button
+              onClick={() => setCuidadorAberto(prev => ({ ...prev, [u.id]: !prev[u.id] }))}
+              style={{ padding: '6px 14px', fontSize: '15px', backgroundColor: '#1a4a2a', color: '#4ecc71', border: '1px solid #2a7a3a', borderRadius: '6px', cursor: 'pointer' }}
+            >
+              Gerar Link Cuidador
+            </button>
+
+            {/* Formulário + link do cuidador */}
+            {(cuidadorAberto[u.id] || (!u.cuidador_token && !cuidadorLink[u.id])) && cuidadorAberto[u.id] && (
+              <div style={{ marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Nome do cuidador"
+                  value={cuidadorNome[u.id] || ''}
+                  onChange={(e) => setCuidadorNome(prev => ({ ...prev, [u.id]: e.target.value }))}
+                  style={{ fontSize: '16px', padding: '8px', flex: 1, minWidth: '160px' }}
+                />
+                <button
+                  onClick={() => gerarLinkCuidador(u.id)}
+                  style={{ padding: '8px 16px', fontSize: '16px', backgroundColor: '#0070f3', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Gerar
+                </button>
+              </div>
+            )}
+
+            {/* Link recém-gerado */}
+            {cuidadorLink[u.id] && (
+              <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#0d2137', borderRadius: '8px', border: '1px solid #1a4a6a' }}>
+                <p style={{ fontSize: '13px', color: '#888', margin: '0 0 6px' }}>Link do cuidador (copie e envie):</p>
+                <code style={{ fontSize: '13px', color: '#4a9eff', wordBreak: 'break-all', display: 'block' }}>{cuidadorLink[u.id]}</code>
+              </div>
+            )}
+
+            {/* Link existente no banco */}
+            {u.cuidador_token && !cuidadorLink[u.id] && (
+              <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#0d2137', borderRadius: '8px', border: '1px solid #1a4a6a' }}>
+                <p style={{ fontSize: '13px', color: '#888', margin: '0 0 6px' }}>Cuidador: <strong style={{ color: '#eee' }}>{u.cuidador_nome}</strong></p>
+                <code style={{ fontSize: '13px', color: '#4a9eff', wordBreak: 'break-all', display: 'block' }}>
+                  {`https://companheiro-idoso.vercel.app/cuidador?token=${u.cuidador_token}`}
+                </code>
+              </div>
+            )}
 
             {/* Área de observação */}
             {obs?.status === 'loading' && (

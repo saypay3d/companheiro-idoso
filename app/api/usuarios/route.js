@@ -3,10 +3,13 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 export async function GET() {
-  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS senha VARCHAR(50)`.catch(() => {});
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS senha          VARCHAR(50)`.catch(() => {});
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cuidador_nome  VARCHAR(100)`.catch(() => {});
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cuidador_token VARCHAR(50)`.catch(() => {});
   const result = await sql`
     SELECT id, nome, idade, data_criacao,
-           (senha IS NOT NULL AND senha <> '') AS tem_senha
+           (senha IS NOT NULL AND senha <> '') AS tem_senha,
+           cuidador_nome, cuidador_token
     FROM usuarios ORDER BY nome ASC`;
   return Response.json(result);
 }
